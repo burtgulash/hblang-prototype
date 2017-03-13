@@ -1,0 +1,16 @@
+eventual
+    term transformation
+    '(' eventual ')' transformation
+transformation
+    eventual eventual
+    ''
+definition
+    '{' eventual '}'
+term
+    definition
+    number
+    text
+    punctuation
+    string
+string
+    '"' text '"' 
