@@ -11,7 +11,7 @@ class Error(Exception):
         self.R = R
 
 class S:
-    
+
     def __init__(self, s):
         self.L = L
         self.X = X
@@ -36,7 +36,8 @@ def Either(s, *a):
         except Error as err:
             pass
     raise Error("No matching rule", s)
-    
+
+
 def E(s):
     return Either(s, [E1, E2])
 
@@ -83,8 +84,61 @@ def A(s):
     return Either(s, [Punc, Number, String])
 
 def Punc(s):
-    assert len(s) == 1
-    if s.X in "!$%&'*+,-./:;<=>?@\^`|~":
-        return ["Punc", s.X]
+    char = s.X
+    assert len(char) == 1
+    symbols = "!$%&'*+,-./:;<=>?@\^`|~"
+    if char in symbols:
+        s.shift()
+        return ["Punc", char], s
+    raise Error("f{s.X} is not a punctuation symbol")
 
+def Number_(s):
+    digit = s.X
+    assert len(digit) == 1
+    if digit.isnumeric():
+        s.shift()
+        return digit, Number_(s), s
+    return "", "", s
 
+def Number(s):
+    x, xs, s = Number_(s)
+    if x == "":
+        raise Error("Can't parse number", s)
+
+    try:
+        num = x + xs
+        return int(num)
+    except ValueError:
+        return Error("f{num} can't be parsed as a number", s)
+
+def String(s):
+    return Either(s, [Simple_string, Enclosed_string])
+
+def Simple_string_(s):
+    char = s.X
+    assert len(char) == 1
+    symbols = "_abcdefghijklmnopqrstuvwxyz"
+    if char.lower() in symbols:
+        s.shift()
+        return char, Simple_string_(s), s
+    return "", "", s
+
+def Simple_string(s):
+    x, xs, s = Simple_string_(s)
+    if x == "":
+        raise Error("Can't parse 'Simple string'", s)
+    return ["Simple_string", x + xs], s
+
+def Enclosed_string_(s):
+    char = s.X
+    assert len(char) == 1
+    if char == '"':
+        return "", s
+    s.shift()
+    return char, Enclosed_string_(s), s
+
+def Enclosed_string(s):
+    if s.X != '"':
+        raise Error("String doesn't start with '\"'", s)
+    x, xs, s = Enclosed_string_(s)
+    return ["Enclosed_string", x + xs], s
