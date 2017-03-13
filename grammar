@@ -1,19 +1,17 @@
 E
-    E1
-    E2
-E1
-    '(' E ')' T
-    '{' E '}' T
-    A
-E2
-    A Tn
+    space E space
+E_
+    '(' E ')' Ts
+    '{' E '}' Ts
+    A Ts
+    '\0'
+Ts
+    space T
 T
-    Tn
-    Te
-Tn                  # T non-empty
-    ':' E1
+    ':' E
     E E
-Te                  # T empty
+    Te
+Te
     ''
 A
     number
