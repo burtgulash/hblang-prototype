@@ -2,6 +2,7 @@
 
 import sys
 
+EMPTY = "T.Empty"
 
 class Error(Exception):
 
@@ -10,9 +11,6 @@ class Error(Exception):
         self.L = s.L
         self.X = s.X
         self.R = s.R
-
-class NoMatch(Exception):
-    pass
 
 
 class S:
@@ -42,55 +40,53 @@ def Finish(result, stream):
 def Either(s, fs):
     for f in fs:
         try:
-            # print(f"TRYING {f.__name__} '{(s.X)}'")
+            print(f"TRYING {f.__name__} '{(s.X)}'")
             parsed, s = f(s)
             return parsed, s
         except Error as err:
             pass
 
-    raise NoMatch("No matching rule", s)
+    raise Error("No matching rule", s)
 
 def E(s):
+    return Either(s, [X, Er, El])
+
+def Er(s):
+    l, s = X(s)
+    s = expect(":", s)
+    r, s = X(s)
+    return ["Er", l, ":", r]
+
+def El(s):
+    l, s = X(s)
+    m, s = X(s)
+    r, s = X(s)
+    return ["El", l, m, r]
+
+def X(s):
     s = Space(s)
-    p, s = E_(s)
+    p, s = Xh(s)
     s = Space(s)
     return p, s
 
-def Eh(name, rparen, s):
-    a, s = E(s.shift())
-    if s.X == rparen:
-        p, s = T(s.shift())
-        return [name, a, p], s
-    raise Error("[f{name}] right parenthesis missing", s)
-
-def E_(s):
+def Xh(s):
     if s.X == "(":
-        return Eh("E.(", ")", s)
+        return Xparen(")", s)
     if s.X == "{":
-        return Eh("E.{", "}", s)
+        p, s = Xparen("}", s)
+        return ["Fn", p], s
+    return A(s)
 
-    a, s = A(s)
-    t, s = Ts(s)
-    return ["E.a", a, t], s
-
-def Ts(s):
-    s = Space(s)
-    return T(s)
-
-def T(s):
-    if s.X == ":":
-        p, s = E(s.shift())
-        return ["T.:", p], s
-
-    ss = s
-    try:
-        a, s = E(s)
-        b, s = E(s)
-        return ["T.E", a, b], s
-    except NoMatch as err:
-        return ["Eps"], ss
+def Xparen(name, rparen, s):
+    s = s.shift()
+    if s.X == rparen:
+        return "Void", s.shift()
+    p, s = E(s)
+    s = expect(")", s)
+    return p, s
 
 def A(s):
+    print("A", s)
     return Either(s, [Punc, Number, String])
 
 def Space(s):
@@ -160,8 +156,8 @@ def parse(text):
     s = S(L, X, R)
     try:
         p, s = E(s)
-        if len(s.R) > 0:
-            raise Error("Tail not consumed", s)
+        # if len(s.R) > 0:
+        #     raise Error("Tail not consumed", s)
         return p, s
     except Error as err:
         print(f"Parse error: {err.msg} in {s}", file=sys.stderr)

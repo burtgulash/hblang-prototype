@@ -1,17 +1,15 @@
 E
-    space E space
-E_
-    '(' E ')' Ts
-    '{' E '}' Ts
-    A Ts
-    '\0'
-Ts
-    space T
-T
-    ':' E
-    E E
-    Te
-Te
+    X
+    X : X
+    X X X
+X
+    space Xh space
+Xh
+    ( P )
+    { P }
+    A
+P
+    E
     ''
 A
     number
