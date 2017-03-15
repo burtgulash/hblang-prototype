@@ -53,15 +53,36 @@ def num(tok):
 def identity(x):
     return x
 
+def interpret(c):
+    return {
+        "n": "\n",
+        "r": "\r",
+        "t": "\t",
+        '"': '"',
+        "'": "'",
+    }[c]
+
+def unescape(s):
+    escaped = False
+    for c in s:
+        if c == "\\":
+            escaped=True
+            continue
+        if escaped:
+            c = interpret(c)
+            escaped = False
+        yield c
+
 def string(tok):
-    return tok[1:-1]
+    tok = tok[1:-1]
+    return "".join(unescape(tok))
 
 
 def lex(text):
     rules = (
         (TT.NUM, num, "[_0-9]+"),
         (TT.SYMBOL, identity, "[a-zA-Z][a-zA-Z_]*"),
-        (TT.STRING, string, '"([^"]|\\.)*"'),
+        (TT.STRING, string, '"(?:[^"]|\\\")*"'),
         (TT.PUNCTUATION, identity, "[!$%&'*+,-./:;<=>?@\\^`~]"),
         (TT.SEPARATOR, identity, "[|\n]"),
         (TT.SPACE, identity, "[ \t]+"),
@@ -77,6 +98,7 @@ def lex(text):
         tt = TT[tt_name]
         tok = x.group(tt_name)
         tok = transform[tt_name](tok)
+        print(tok)
         yield Tok(tt, tok)
 
 
