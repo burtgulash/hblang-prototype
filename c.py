@@ -28,16 +28,19 @@ class Node:
 
 
 class TT(Enum):
-    NUM = 1
-    SYMBOL = 2
-    STRING = 3
-    PUNCTUATION = 4
-    SEPARATOR = 5
-    SPACE = 6
-    LPAREN = 7
-    RPAREN = 8
-    END = 9
+    COMMENT = 1
+    NUM = 2
+    SYMBOL = 3
+    STRING = 4
+    PUNCTUATION = 5
+    SEPARATOR = 6
+    SPACE = 7
+    LPAREN = 8
+    RPAREN = 9
+    END = 10
 
+def comment(tok):
+    return tok[1:-1]
 
 def num(tok):
     if tok == "_":
@@ -83,6 +86,7 @@ def lex(text):
         (TT.NUM, num, "[_0-9]+"),
         (TT.SYMBOL, identity, "[a-zA-Z][a-zA-Z_]*"),
         (TT.STRING, string, '"(?:[^"]|\\\")*"'),
+        (TT.COMMENT, comment, "#.*\n"),
         (TT.PUNCTUATION, identity, "[!$%&'*+,-./:;<=>?@\\^`~]"),
         (TT.SEPARATOR, identity, "[|\n]"),
         (TT.SPACE, identity, "[ \t]+"),
@@ -98,13 +102,12 @@ def lex(text):
         tt = TT[tt_name]
         tok = x.group(tt_name)
         tok = transform[tt_name](tok)
-        print(tok)
         yield Tok(tt, tok)
 
 
 def parse(text):
-    toks = lex(text)
-    toks = (tok for tok in toks if tok.tt != TT.SPACE)
+    toks = lex(text + "\n")  # extra newline as a sentinel for comments
+    toks = (tok for tok in toks if tok.tt not in (TT.SPACE, TT.COMMENT))
     toks = list(toks) + [Tok(TT.END, "")]
     stream = toks[::-1]
     Eval(stream)
