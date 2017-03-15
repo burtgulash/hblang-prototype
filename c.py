@@ -1,6 +1,43 @@
 #!/usr/bin/env python3
 
+from enum import Enum
 import re
+from typing import NamedTuple, Any
+
+
+class Tok:
+
+    def __init__(self, tt, x):
+        self.tt = tt
+        self.x = x
+
+    def __repr__(n):
+        return str(n.x)
+
+
+class Node:
+
+    def __init__(self, tt, L, X, R):
+        self.tt = tt
+        self.L = L
+        self.X = X
+        self.R = R
+
+    def __str__(n):
+        return f"[{n.L} {n.X} {n.R}]"
+
+
+class TT(Enum):
+    NUM = 1
+    SYMBOL = 2
+    STRING = 3
+    PUNCTUATION = 4
+    SEPARATOR = 5
+    SPACE = 6
+    LPAREN = 7
+    RPAREN = 8
+    END = 9
+
 
 def num(tok):
     if tok == "_":
@@ -22,77 +59,76 @@ def string(tok):
 
 def lex(text):
     rules = (
-        ("num", num, "[_0-9]+"),
-        ("symbol", identity, "[a-zA-Z][a-zA-Z_]*"),
-        ("string", string, '"([^"]|\\.)*"'),
-        ("punctuation", identity, "[!$%&'*+,-./:;<=>?@\\^`~]"),
-        ("separator", identity, "[|\n]"),
-        ("space", identity, "[ \t]+"),
-        ("lparen", identity, "[({[]"),
-        ("rparen", identity, "[]})]"),
+        (TT.NUM, num, "[_0-9]+"),
+        (TT.SYMBOL, identity, "[a-zA-Z][a-zA-Z_]*"),
+        (TT.STRING, string, '"([^"]|\\.)*"'),
+        (TT.PUNCTUATION, identity, "[!$%&'*+,-./:;<=>?@\\^`~]"),
+        (TT.SEPARATOR, identity, "[|\n]"),
+        (TT.SPACE, identity, "[ \t]+"),
+        (TT.LPAREN, identity, "[({[]"),
+        (TT.RPAREN, identity, "[]})]"),
     )
-    rx = (f"(?P<{name}>{defn})" for name, _, defn in rules)
+    rx = (f"(?P<{tt.name}>{defn})" for tt, _, defn in rules)
     rx = "|".join(rx)
 
-    transform = {name: fn for name, fn, _ in rules}
+    transform = {tt.name: fn for tt, fn, _ in rules}
     for x in re.finditer(rx, text):
-        tok_type = x.lastgroup
-        tok = x.group(tok_type)
-        tok = transform[tok_type](tok)
-        yield tok_type, tok
+        tt_name = x.lastgroup
+        tt = TT[tt_name]
+        tok = x.group(tt_name)
+        tok = transform[tt_name](tok)
+        yield Tok(tt, tok)
 
 
 def parse(text):
-    toks = list(lex(text))
-    print("TOKS", toks)
-    toks = [tok for tt, tok in toks if tt != "space"]
-    
-    stream = (list(toks) + ["\0"])[::-1]
+    toks = lex(text)
+    toks = (tok for tok in toks if tok.tt != TT.SPACE)
+    toks = list(toks) + [Tok(TT.END, "")]
+    stream = toks[::-1]
     Eval(stream)
     return stream.pop()
 
 def REval(stream):
     L = stream.pop()
     X = stream.pop()
-    if X == ":":
-        return [L, X, REval(stream)]
+    if X.x == ":":
+        return Node(X.tt, L, X, REval(stream))
     else:
         # return ")", "\0", or whatever back
-        print("RETURN", X, stream[::-1])
         stream.append(X)
         return L
 
+def end_of_expr(x):
+    return x.tt in (TT.RPAREN, TT.END)
 
 def Eval(stream):
     while len(stream) > 1:
-        print("S", stream[::-1])
         L = stream.pop()
-        if L == "(":
+        if L.tt == TT.LPAREN:
             Eval(stream)
             if len(stream) == 1:
                 break
             L = stream.pop()
-        elif L == ")":
+        elif L.tt == TT.RPAREN:
             L = "Void"
 
         X = stream.pop()
-        if X in (")", "\0"):
+        if end_of_expr(X):
             stream.append(L)
             break
 
         R = stream.pop()
-        if R == "(":
+        if R.tt == TT.LPAREN:
             Eval(stream)
             R = stream.pop()
 
         Z = stream.pop()
-        if Z == ":":
-            R = [R, Z, REval(stream)]
+        if Z.x == ":":
+            R = Node(Z.tt, R, Z, REval(stream))
         else:
             stream.append(Z)
 
-        print("I", stream[::-1])
-        z = [L, X, R]
+        z = Node(X.tt, L, X, R)
         stream.append(z)
 
 if __name__ == "__main__":
