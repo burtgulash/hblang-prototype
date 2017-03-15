@@ -13,6 +13,9 @@ def num(tok):
     num = -num if negative else num
     return num
 
+def identity(x):
+    return x
+
 def string(tok):
     return tok[1:-1]
 
@@ -20,13 +23,13 @@ def string(tok):
 def lex(text):
     rules = (
         ("num", num, "[_0-9]+"),
-        ("symbol", id, "[a-zA-Z][a-zA-Z_]*"),
+        ("symbol", identity, "[a-zA-Z][a-zA-Z_]*"),
         ("string", string, '"([^"]|\\.)*"'),
-        ("punctuation", id, "[!$%&'*+,-./:;<=>?@\\^`~]"),
-        ("separator", id, "[|\n]"),
-        ("space", id, "[ \t]+"),
-        ("lparen", id, "[({[]"),
-        ("rparen", id, "[]})]"),
+        ("punctuation", identity, "[!$%&'*+,-./:;<=>?@\\^`~]"),
+        ("separator", identity, "[|\n]"),
+        ("space", identity, "[ \t]+"),
+        ("lparen", identity, "[({[]"),
+        ("rparen", identity, "[]})]"),
     )
     rx = (f"(?P<{name}>{defn})" for name, _, defn in rules)
     rx = "|".join(rx)
@@ -35,16 +38,16 @@ def lex(text):
     for x in re.finditer(rx, text):
         tok_type = x.lastgroup
         tok = x.group(tok_type)
-        print(tok_type, tok)
-        yield tok
-        #yield transform[tok_type](tok)
+        tok = transform[tok_type](tok)
+        yield tok_type, tok
+
 
 def parse(text):
     toks = list(lex(text))
-    print("TOK", toks)
-    return
+    print("TOKS", toks)
+    toks = [tok for tt, tok in toks if tt != "space"]
     
-    stream = (list(stream) + ["\0"])[::-1]
+    stream = (list(toks) + ["\0"])[::-1]
     Eval(stream)
     return stream.pop()
 
