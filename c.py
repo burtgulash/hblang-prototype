@@ -114,7 +114,7 @@ def lex(text):
         yield Tok(tt, tok)
 
 
-def parse(text):
+def Parse(text):
     toks = lex(text + "\n")  # extra newline as a sentinel for comments
     toks = (tok for tok in toks if tok.tt not in (TT.SPACE, TT.COMMENT))
     toks = list(toks)
@@ -173,9 +173,10 @@ def LParse(stream):
         z = Node(X.tt, L, X, R)
         stream.append(z)
 
+
 if __name__ == "__main__":
     import sys
     inp = sys.stdin.read()[:-1]
     print(">", inp)
-    out = parse(inp)
-    print(out)
+    tree = Parse(inp)
+    print(tree)
