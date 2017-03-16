@@ -28,7 +28,7 @@ def Repl(prompt="> "):
                 print(y)
         except ParseError as err:
             print(f"Parse error: {err}", file=sys.stderr)
-        except EOFError:
+        except (EOFError, KeyboardInterrupt):
             break
 
 

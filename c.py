@@ -33,16 +33,17 @@ class Node:
 
 class TT(Enum):
     COMMENT = 1
-    NUM = 2
-    VAR = 3
-    SYMBOL = 4
-    STRING = 5
-    PUNCTUATION = 6
-    SEPARATOR = 7
-    SPACE = 8
-    LPAREN = 9
-    RPAREN = 10
-    END = 11
+    VOID = 2
+    NUM = 3
+    VAR = 4
+    SYMBOL = 5
+    STRING = 6
+    PUNCTUATION = 7
+    SEPARATOR = 8
+    SPACE = 9
+    LPAREN = 10
+    RPAREN = 11
+    END = 12
 
 def comment(tok):
     return tok[1:-1]
@@ -90,24 +91,33 @@ def symbol(tok):
     # return tok[1:]
     return tok
 
+def void(tok):
+    return re.sub(f"{SPACE_RX}+", "", tok)
+
 SYMBOL_RX = "[a-zA-Z][a-zA-Z_]*"
+SPACE_RX = "[ \t]"
 
 def lex_(text):
     rules = (
         (TT.NUM, num, "[_0-9]+"),
         (TT.VAR, identity, SYMBOL_RX),
+        (TT.VOID, void, (f"\\({SPACE_RX}*\\)"
+                         f"|\\{{{SPACE_RX}*\\}}"
+                         f"|\\[{SPACE_RX}*\\]")),
+
         # use backtick for symbol because of bash escaping
-        (TT.SYMBOL, symbol, "`" + SYMBOL_RX),
-        (TT.STRING, string, '"(?:[^"]|\\")*"'),
+        (TT.SYMBOL, symbol, f"`{SYMBOL_RX}"),
+        (TT.STRING, string, '"(?:[^"]|\\\\")*"'),
         (TT.COMMENT, comment, "#.*\n"),
         (TT.PUNCTUATION, identity, "[!$%&*+,-./:;<=>?@\\^`~]"),
         (TT.SEPARATOR, identity, "[|\n]"),
-        (TT.SPACE, identity, "[ \t]+"),
+        (TT.SPACE, identity, f"{SPACE_RX}+"),
         (TT.LPAREN, identity, "[({[]"),
         (TT.RPAREN, identity, "[]})]"),
     )
     rx = (f"(?P<{tt.name}>{defn})" for tt, _, defn in rules)
     rx = "|".join(rx)
+    #print("DEBUG: lex by regex:", rx, file=sys.stderr)
 
     transform = {tt.name: fn for tt, fn, _ in rules}
     for x in re.finditer(rx, text):
@@ -132,8 +142,9 @@ def Lex(text):
         toks = toks[:-1]
 
     # Check for correctness
-    if len(toks) % 2 == 0:
-        raise ParseError(f"Even number [{len(toks)}] of tokens."
+    n_toks = len([x for x in toks if x.tt not in (TT.LPAREN, TT.RPAREN)])
+    if n_toks % 2 == 0:
+        raise ParseError(f"Even number [{n_toks}] of tokens."
                          " Only odd allowed.")
 
     # Add EOF token
@@ -168,8 +179,9 @@ def LParse(stream):
             if len(stream) == 1:
                 break
             L = stream.pop()
-        elif L.tt == TT.RPAREN:
-            L = "Void"
+
+        # This must be handled by lexing void
+        assert L.tt != TT.RPAREN
 
         X = stream.pop()
         if end_of_expr(X):
