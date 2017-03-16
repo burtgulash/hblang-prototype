@@ -16,7 +16,7 @@ class Tok:
         self.x = x
 
     def __repr__(n):
-        return str(n.x)
+        return str(f"{n.tt.name[:4].lower()}.{n.x}")
 
 
 class Node:
@@ -135,7 +135,6 @@ def Lex(text):
     # Remove insignificant tokens - spaces and comments
     toks = (tok for tok in toks if tok.tt not in (TT.SPACE, TT.COMMENT))
     toks = list(toks)
-    print(toks)
 
     # Remove the \n sentinel if it wasn't used by comment
     if toks[-1].tt == TT.SEPARATOR:
