@@ -30,14 +30,15 @@ class Node:
 class TT(Enum):
     COMMENT = 1
     NUM = 2
-    SYMBOL = 3
-    STRING = 4
-    PUNCTUATION = 5
-    SEPARATOR = 6
-    SPACE = 7
-    LPAREN = 8
-    RPAREN = 9
-    END = 10
+    VAR = 3
+    SYMBOL = 4
+    STRING = 5
+    PUNCTUATION = 6
+    SEPARATOR = 7
+    SPACE = 8
+    LPAREN = 9
+    RPAREN = 10
+    END = 11
 
 def comment(tok):
     return tok[1:-1]
@@ -80,14 +81,22 @@ def string(tok):
     tok = tok[1:-1]
     return "".join(unescape(tok))
 
+def symbol(tok):
+    assert tok[0] == "`"
+    # return tok[1:]
+    return tok
+
+SYMBOL_RX = "[a-zA-Z][a-zA-Z_]*"
 
 def lex(text):
     rules = (
         (TT.NUM, num, "[_0-9]+"),
-        (TT.SYMBOL, identity, "[a-zA-Z][a-zA-Z_]*"),
+        (TT.VAR, identity, SYMBOL_RX),
+        # use backtick for symbol because of bash escaping
+        (TT.SYMBOL, symbol, "`" + SYMBOL_RX),
         (TT.STRING, string, '"(?:[^"]|\\\")*"'),
         (TT.COMMENT, comment, "#.*\n"),
-        (TT.PUNCTUATION, identity, "[!$%&'*+,-./:;<=>?@\\^`~]"),
+        (TT.PUNCTUATION, identity, "[!$%&*+,-./:;<=>?@\\^`~]"),
         (TT.SEPARATOR, identity, "[|\n]"),
         (TT.SPACE, identity, "[ \t]+"),
         (TT.LPAREN, identity, "[({[]"),
@@ -108,7 +117,15 @@ def lex(text):
 def parse(text):
     toks = lex(text + "\n")  # extra newline as a sentinel for comments
     toks = (tok for tok in toks if tok.tt not in (TT.SPACE, TT.COMMENT))
-    toks = list(toks) + [Tok(TT.END, "")]
+    toks = list(toks)
+
+    # Remove the \n sentinel if it wasn't used by comment
+    if toks[-1].tt == TT.SEPARATOR:
+        toks = toks[:-1]
+
+    toks = toks + [Tok(TT.END, "")]
+
+    # Revert list to form a stack
     stream = toks[::-1]
     Eval(stream)
     return stream.pop()
