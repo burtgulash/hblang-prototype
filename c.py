@@ -5,6 +5,10 @@ import re
 from typing import NamedTuple, Any
 
 
+class ParseError(Exception):
+    pass
+
+
 class Tok:
 
     def __init__(self, tt, x):
@@ -115,7 +119,10 @@ def lex(text):
 
 
 def Parse(text):
-    toks = lex(text + "\n")  # extra newline as a sentinel for comments
+    # add extra newline at the end as a sentinel for comments
+    toks = lex(text + "\n")
+
+    # Remove insignificant tokens - spaces and comments
     toks = (tok for tok in toks if tok.tt not in (TT.SPACE, TT.COMMENT))
     toks = list(toks)
 
@@ -123,6 +130,12 @@ def Parse(text):
     if toks[-1].tt == TT.SEPARATOR:
         toks = toks[:-1]
 
+    # Check for correctness
+    if len(toks) % 2 == 0:
+        raise ParseError(f"Even number [{len(toks)}] of tokens."
+                         " Only odd allowed.")
+
+    # Add EOF token
     toks = toks + [Tok(TT.END, "")]
 
     # Revert list to form a stack

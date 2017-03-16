@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
+import sys
+
 import readline
-from c import Parse
+from c import Parse, ParseError
 
 readline.parse_and_bind('tab: complete')
 readline.parse_and_bind('set editing-mode vi')
@@ -15,14 +17,19 @@ class Env:
 
 def Eval(x, env):
     return x
-    
+
 
 def Repl(prompt="> "):
     env = Env(None)
     while True:
-        y = Eval(Parse(input(prompt)), env)
-        if y is not None:
-            print(y)
+        try:
+            y = Eval(Parse(input(prompt)), env)
+            if y is not None:
+                print(y)
+        except ParseError as err:
+            print(f"Parse error: {err}", file=sys.stderr)
+        except EOFError:
+            break
 
 
 if __name__ == "__main__":
