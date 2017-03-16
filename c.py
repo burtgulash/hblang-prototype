@@ -92,13 +92,13 @@ def symbol(tok):
 
 SYMBOL_RX = "[a-zA-Z][a-zA-Z_]*"
 
-def lex(text):
+def lex_(text):
     rules = (
         (TT.NUM, num, "[_0-9]+"),
         (TT.VAR, identity, SYMBOL_RX),
         # use backtick for symbol because of bash escaping
         (TT.SYMBOL, symbol, "`" + SYMBOL_RX),
-        (TT.STRING, string, '"(?:[^"]|\\\")*"'),
+        (TT.STRING, string, '"(?:[^"]|\\")*"'),
         (TT.COMMENT, comment, "#.*\n"),
         (TT.PUNCTUATION, identity, "[!$%&*+,-./:;<=>?@\\^`~]"),
         (TT.SEPARATOR, identity, "[|\n]"),
@@ -118,13 +118,14 @@ def lex(text):
         yield Tok(tt, tok)
 
 
-def Parse(text):
+def Lex(text):
     # add extra newline at the end as a sentinel for comments
-    toks = lex(text + "\n")
+    toks = lex_(text + "\n")
 
     # Remove insignificant tokens - spaces and comments
     toks = (tok for tok in toks if tok.tt not in (TT.SPACE, TT.COMMENT))
     toks = list(toks)
+    print(toks)
 
     # Remove the \n sentinel if it wasn't used by comment
     if toks[-1].tt == TT.SEPARATOR:
@@ -137,8 +138,11 @@ def Parse(text):
 
     # Add EOF token
     toks = toks + [Tok(TT.END, "")]
+    return toks
 
-    # Revert list to form a stack
+
+def Parse(toks):
+    # Revert list of tokens to form a stack
     stream = toks[::-1]
     LParse(stream)
     return stream.pop()

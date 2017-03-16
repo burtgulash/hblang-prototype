@@ -3,7 +3,7 @@
 import sys
 
 import readline
-from c import Parse, ParseError
+from c import Lex, Parse, ParseError
 
 readline.parse_and_bind('tab: complete')
 readline.parse_and_bind('set editing-mode vi')
@@ -23,7 +23,7 @@ def Repl(prompt="> "):
     env = Env(None)
     while True:
         try:
-            y = Eval(Parse(input(prompt)), env)
+            y = Eval(Parse(Lex(input(prompt))), env)
             if y is not None:
                 print(y)
         except ParseError as err:
