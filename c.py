@@ -127,14 +127,14 @@ def parse(text):
 
     # Revert list to form a stack
     stream = toks[::-1]
-    Eval(stream)
+    LParse(stream)
     return stream.pop()
 
-def REval(stream):
+def RParse(stream):
     L = stream.pop()
     X = stream.pop()
     if X.x == ":":
-        return Node(X.tt, L, X, REval(stream))
+        return Node(X.tt, L, X, RParse(stream))
     else:
         # return ")", "\0", or whatever back
         stream.append(X)
@@ -143,11 +143,11 @@ def REval(stream):
 def end_of_expr(x):
     return x.tt in (TT.RPAREN, TT.END)
 
-def Eval(stream):
+def LParse(stream):
     while len(stream) > 1:
         L = stream.pop()
         if L.tt == TT.LPAREN:
-            Eval(stream)
+            LParse(stream)
             if len(stream) == 1:
                 break
             L = stream.pop()
@@ -161,12 +161,12 @@ def Eval(stream):
 
         R = stream.pop()
         if R.tt == TT.LPAREN:
-            Eval(stream)
+            LParse(stream)
             R = stream.pop()
 
         Z = stream.pop()
         if Z.x == ":":
-            R = Node(Z.tt, R, Z, REval(stream))
+            R = Node(Z.tt, R, Z, RParse(stream))
         else:
             stream.append(Z)
 
