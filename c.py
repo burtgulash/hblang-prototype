@@ -164,6 +164,11 @@ def Parse(toks):
 
 def RParse(stream):
     L = stream.pop()
+    if L.tt == TT.LPAREN:
+        stream.append(L)
+        LParse(stream)
+        L = stream.pop()
+
     X = stream.pop()
     if right_associative(X.x):
         return Node(X.tt, L, X, RParse(stream))

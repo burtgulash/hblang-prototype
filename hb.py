@@ -72,7 +72,7 @@ def Repl(prompt="> "):
             y = Lex(y)
             #print("LEX", y)
             y = Parse(y)
-            y = Eval(y, env)
+            #y = Eval(y, env)
             if y is not None:
                 print(y)
         except ParseError as err:
