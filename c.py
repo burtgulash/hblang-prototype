@@ -21,7 +21,7 @@ class Tok:
         self.x = x
 
     def __repr__(n):
-        return str(f"{n.tt.name[:4].lower()}.{n.x}")
+        return str(f"{n.tt.name[:3].lower()}{n.x}")
 
 
 class Node:
@@ -35,20 +35,22 @@ class Node:
     def __str__(n):
         return f"[{n.L} {n.X} {n.R}]"
 
+    def __repr__(n):
+        return f"[{n.L} {n.X} {n.R}]"
+
 
 class TT(Enum):
     COMMENT = 1
     VOID = 2
     NUM = 3
-    VAR = 4
-    SYMBOL = 5
-    STRING = 6
-    PUNCTUATION = 7
-    SEPARATOR = 8
-    SPACE = 9
-    LPAREN = 10
-    RPAREN = 11
-    END = 12
+    SYMBOL = 4
+    STRING = 5
+    PUNCTUATION = 6
+    SEPARATOR = 7
+    SPACE = 8
+    LPAREN = 9
+    RPAREN = 10
+    END = 11
 
 def comment(tok):
     return tok[1:-1]
@@ -105,13 +107,12 @@ SPACE_RX = "[ \t]"
 def lex_(text):
     rules = (
         (TT.NUM, num, "[_0-9]+"),
-        (TT.VAR, identity, SYMBOL_RX),
+        (TT.SYMBOL, identity, SYMBOL_RX),
         (TT.VOID, void, (f"\\({SPACE_RX}*\\)"
                          f"|\\{{{SPACE_RX}*\\}}"
                          f"|\\[{SPACE_RX}*\\]")),
 
         # use backtick for symbol because of bash escaping
-        (TT.SYMBOL, symbol, f"`{SYMBOL_RX}"),
         (TT.STRING, string, '"(?:[^"]|\\\\")*"'),
         (TT.COMMENT, comment, "#.*\n"),
         (TT.PUNCTUATION, identity, "[!$%&*+,-./:;<=>?@\\^`~]"),
@@ -162,20 +163,20 @@ def Parse(toks):
     LParse(stream)
     return stream.pop()
 
-def RParse(stream):
+def RParse(stream, stack):
     L = stream.pop()
     if L.tt == TT.LPAREN:
-        stream.append(L)
         LParse(stream)
         L = stream.pop()
 
     X = stream.pop()
     if right_associative(X.x):
-        return Node(X.tt, L, X, RParse(stream))
+        RParse(stream, stack)
+        stack.append(Node(X.tt, L, X, stack.pop()))
     else:
-        # return ")", "\0", or whatever back
+        # return ")", "\0", or whatever end token back
         stream.append(X)
-        return L
+        stack.append(L)
 
 def end_of_expr(x):
     return x.tt in (TT.RPAREN, TT.END)
@@ -193,6 +194,10 @@ def LParse(stream):
         assert L.tt != TT.RPAREN
 
         X = stream.pop()
+        if X.tt == TT.LPAREN:
+            LParse(stream)
+            X = stream.pop()
+
         if end_of_expr(X):
             stream.append(L)
             break
@@ -202,14 +207,18 @@ def LParse(stream):
             LParse(stream)
             R = stream.pop()
 
+        # Process lookahead token
         Z = stream.pop()
         if right_associative(Z.x):
-            R = Node(Z.tt, R, Z, RParse(stream))
+            stack = []
+            RParse(stream, stack)
+            assert len(stack) == 1
+            R = Node(Z.tt, R, Z, stack.pop())
         else:
+            # Return lookahead back
             stream.append(Z)
 
-        z = Node(X.tt, L, X, R)
-        stream.append(z)
+        stream.append(Node(X.tt, L, X, R))
 
 
 if __name__ == "__main__":
