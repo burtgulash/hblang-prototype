@@ -5,6 +5,11 @@ import re
 from typing import NamedTuple, Any
 
 
+
+def right_associative(x):
+    return x and x in ":$"
+
+
 class ParseError(Exception):
     pass
 
@@ -160,7 +165,7 @@ def Parse(toks):
 def RParse(stream):
     L = stream.pop()
     X = stream.pop()
-    if X.x == ":":
+    if right_associative(X.x):
         return Node(X.tt, L, X, RParse(stream))
     else:
         # return ")", "\0", or whatever back
@@ -193,7 +198,7 @@ def LParse(stream):
             R = stream.pop()
 
         Z = stream.pop()
-        if Z.x == ":":
+        if right_associative(Z.x):
             R = Node(Z.tt, R, Z, RParse(stream))
         else:
             stream.append(Z)

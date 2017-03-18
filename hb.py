@@ -70,6 +70,7 @@ def Repl(prompt="> "):
         try:
             y = input(prompt)
             y = Lex(y)
+            #print("LEX", y)
             y = Parse(y)
             y = Eval(y, env)
             if y is not None:
