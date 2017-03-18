@@ -163,28 +163,16 @@ def Parse(toks):
     LParse(stream)
     return stream.pop()
 
-def RParse(stream, stack):
-    L = stream.pop()
-    if L.tt == TT.LPAREN:
-        LParse(stream)
-        L = stream.pop()
-
-    X = stream.pop()
-    if right_associative(X.x):
-        RParse(stream, stack)
-        stack.append(Node(X.tt, L, X, stack.pop()))
-    else:
-        # return ")", "\0", or whatever end token back
-        stream.append(X)
-        stack.append(L)
 
 def end_of_expr(x):
     return x.tt in (TT.RPAREN, TT.END)
 
 def LParse(stream):
     while len(stream) > 1:
+        # Handle L
         L = stream.pop()
         if L.tt == TT.LPAREN:
+            # Case when first token is a nested expression
             LParse(stream)
             if len(stream) == 1:
                 break
@@ -193,37 +181,44 @@ def LParse(stream):
         # This must be handled by lexing void
         assert L.tt != TT.RPAREN
 
+        # Handle X
         X = stream.pop()
         if X.tt == TT.LPAREN:
+            # Case when operator is wrapped in nested expression
             LParse(stream)
             X = stream.pop()
 
         if X.tt == TT.SEPARATOR:
+            # Expression is separated by |
             LParse(stream)
             R = stream.pop()
             stream.append(Node(X.tt, L, X, R))
             break
 
         if end_of_expr(X):
+            # End of expression
             stream.append(L)
             break
 
+        # Handle R
         R = stream.pop()
         if R.tt == TT.LPAREN:
+            # Right parameter of expression is in nested subexpression
             LParse(stream)
             R = stream.pop()
 
-        # Process lookahead token
         Z = stream.pop()
         if right_associative(Z.x):
-            stack = []
-            RParse(stream, stack)
-            assert len(stack) == 1
-            R = Node(Z.tt, R, Z, stack.pop())
+            # Right associative operator found. Handle recursively
+            LParse(stream)
+            R = Node(Z.tt, R, Z, stream.pop())
+            stream.append(Node(X.tt, L, X, R))
+            break
         else:
-            # Return lookahead back
+            # Else just return the lookahead token back
             stream.append(Z)
 
+        # Create new node from L, X, R gathered above
         stream.append(Node(X.tt, L, X, R))
 
 
