@@ -116,7 +116,7 @@ def lex_(text):
         (TT.STRING, string, '"(?:[^"]|\\\\")*"'),
         (TT.COMMENT, comment, "#.*\n"),
         (TT.PUNCTUATION, identity, "[!$%&*+,-./:;<=>?@\\^`~]"),
-        (TT.SEPARATOR, identity, "[|\n]"),
+        (TT.SEPARATOR, identity, "[|]"),
         (TT.SPACE, identity, f"{SPACE_RX}+"),
         (TT.LPAREN, identity, "[({[]"),
         (TT.RPAREN, identity, "[]})]"),
@@ -197,6 +197,12 @@ def LParse(stream):
         if X.tt == TT.LPAREN:
             LParse(stream)
             X = stream.pop()
+
+        if X.tt == TT.SEPARATOR:
+            LParse(stream)
+            R = stream.pop()
+            stream.append(Node(X.tt, L, X, R))
+            break
 
         if end_of_expr(X):
             stream.append(L)
