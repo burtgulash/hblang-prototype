@@ -101,8 +101,8 @@ def symbol(tok):
 def void(tok):
     return re.sub(f"{SPACE_RX}+", "", tok)
 
-SYMBOL_RX = "[a-zA-Z][a-zA-Z_]*"
-SPACE_RX = "[ \t]"
+SYMBOL_RX = "[a-zA-Z][a-zA-Z0-9_]*"
+SPACE_RX = "[ \t\n]"
 
 def lex_(text):
     rules = (
