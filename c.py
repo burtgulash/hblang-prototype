@@ -57,7 +57,8 @@ class TT(Enum):
     RPAREN = 10
     THUNK = 11
     FUNCTION = 12
-    END = 13
+    BUILTIN = 13
+    END = 14
 
 def comment(tok):
     return tok[1:-1]
@@ -189,6 +190,14 @@ def Parse(toks):
 def end_of_expr(x):
     return x.tt in (TT.RPAREN, TT.END)
 
+def quote(stream, paren_type):
+    x = stream.pop()
+    if paren_type == '[':
+        x = Leaf(TT.THUNK, x)
+    elif paren_type == '{':
+        x = Leaf(TT.FUNCTION, x)
+    return x
+
 def LParse(stream):
     while len(stream) > 1:
         # Handle L
@@ -199,12 +208,7 @@ def LParse(stream):
             LParse(stream)
             if len(stream) == 1:
                 break
-
-            L = stream.pop()
-            if paren_type == '[':
-                L = Leaf(TT.THUNK, L)
-            elif paren_type == '{':
-                L = Leaf(TT.FUNCTION, L)
+            L = quote(stream, paren_type)
 
         # This must be handled by lexing void
         assert L.tt != TT.RPAREN
@@ -214,7 +218,7 @@ def LParse(stream):
         if H.tt == TT.LPAREN:
             # Case when operator is wrapped in nested ewpression
             LParse(stream)
-            H = stream.pop()
+            H = quote(stream, H.w)
 
         if H.tt == TT.SEPARATOR:
             # Expression is separated by |
@@ -233,7 +237,7 @@ def LParse(stream):
         if R.tt == TT.LPAREN:
             # Right parameter of expression is in nested subexpression
             LParse(stream)
-            R = stream.pop()
+            R = quote(stream, R.w)
 
         Z = stream.pop()
         if right_associative(Z.w):

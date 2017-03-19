@@ -8,7 +8,7 @@ from c import Lex, LexTransform, Parse, ParseError, TT, Tree, Leaf
 readline.parse_and_bind('tab: complete')
 readline.parse_and_bind('set editing-mode vi')
 
-global_env = {
+BUILTINS = {
     "+": lambda a, b, env: Leaf(TT.NUM, a.w + b.w),
     "-": lambda a, b, env: Leaf(TT.NUM, a.w - b.w),
     "*": lambda a, b, env: Leaf(TT.NUM, a.w * b.w),
@@ -16,7 +16,7 @@ global_env = {
     ".": lambda a, b, env: Tree(TT.PUNCTUATION, a, ".", b),
     ":": lambda a, b, env: Tree(TT.PUNCTUATION, a, ":", b),
     "|": lambda a, b, env: b,
-    "$": lambda a, b, env: env.lookup(b.w, a),
+    "$": lambda a, b, env: env.lookup(a.w, b),
     "@": lambda a, b, env: env.assign(b.w, a),
 }
 
@@ -46,38 +46,63 @@ class Env:
         env = self.find_env(name) or self
         env.bind(name, value)
         return value
-        
 
-def apply(x, env):
-    L, H, R = x.L, x.H, x.R
-    op = env.lookup(H.w, None)
+
+def apply(L, H, R, env):
     if isinstance(L, Tree):
         L = Eval(L, env)
     if isinstance(R, Tree):
         R = Eval(R, env)
 
-    assert op is not None
-    return op(L, R, env)
+    return H(L, R, env)
+
+def apply_thunk(L, H, R, env):
+    if isinstance(L, Tree):
+        L = Eval(L, env)
+    if isinstance(R, Tree):
+        R = Eval(R, env)
+
+    env.bind("x", L)
+    env.bind("y", R)
+    return Eval(H, env)
+
+def apply_function(L, H, R, env):
+    F = Leaf(TT.THUNK, H)
+    env = Env(env)
+    env.bind("F", F)
+    return apply_thunk(L, F.w, R, env)
 
 
 def Eval(x, env):
     if isinstance(x, Leaf):
-        pass
+        return x
     elif isinstance(x, Tree):
+        if x.H.tt == TT.VOID:
+            return x.H
+
         if isinstance(x.H, Tree):
-            y = Eval(x.H, env)
-            y = Tree(x.L, y, x.R)
-            if y.tt == TT.PUNCTUATION:
-                y = apply(y, env)
-            x = Eval(y, env)
+            print("ISTREE", x.tt)
+            x = Eval(x.H, env)
 
-        x = apply(x, env)
+        print("TT", x, x.H, x.H.tt)
+        if x.H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
+            op = env.lookup(x.H.w, None)
+            assert op is not None
+            if op.tt == TT.BUILTIN:
+                return apply(x.L, op.w, x.R, env)
+            if op.tt == TT.FUNCTION:
+                return apply_function(x.L, op.w, x.R, env)
+        elif x.H.tt == TT.THUNK:
+            return apply_thunk(x.L, x.H.w, x.R, env)
+        elif x.H.tt == TT.FUNCTION:
+            return apply_function(x.L, x.H.w, x.R, env)
 
-    return x
+    assert False
 
 
 def Repl(prompt="> "):
-    env = Env(None, from_dict=global_env)
+    builtins = {k: Leaf(TT.BUILTIN, x) for k, x in BUILTINS.items()}
+    env = Env(None, from_dict=builtins)
     while True:
         try:
             y = input(prompt)
@@ -85,6 +110,7 @@ def Repl(prompt="> "):
             y = LexTransform(y)
             #print("LEX", y)
             y = Parse(y)
+            print("PARSE", y)
             y = Eval(y, env)
             if y is not None:
                 print(y)
