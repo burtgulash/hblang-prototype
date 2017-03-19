@@ -26,27 +26,23 @@ class Env:
         self.parent = parent
         self.e = {**from_dict} or {}
 
-    def lookup(self, name: str, or_else):
-        assert isinstance(name, str)
+    def lookup(self, name, or_else):
         env = self.find_env(name)
         if not env:
             return or_else
         return env.e[name]
 
-    def find_env(self, name: str):
-        assert isinstance(name, str)
+    def find_env(self, name):
         if name in self.e:
             return self
         elif self.parent is not None:
             return self.parent.find_env(name)
         return None
 
-    def bind(self, name: str, value):
-        assert isinstance(name, str)
+    def bind(self, name, value):
         self.e[name] = value
 
-    def assign(self, name: str, value):
-        assert isinstance(name, str)
+    def assign(self, name, value):
         env = self.find_env(name) or self
         env.bind(name, value)
         return value
