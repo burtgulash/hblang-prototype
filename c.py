@@ -25,8 +25,14 @@ class Leaf:
         self.tt = tt
         self.w = w
 
-    def __repr__(n):
-        return str(f"{n.tt.name[:3].lower()}{n.w}")
+    def show(n, function=False):
+        #return str(f" {n.tt.name[:3].lower()}{n.w}")
+        if isinstance(n.w, Tree):
+            return n.w.show(function=n.tt == TT.FUNCTION)
+        return str(n.w)
+
+    def __repr__(self):
+        return self.show()
 
 
 class Tree:
@@ -37,11 +43,14 @@ class Tree:
         self.H = H
         self.R = R
 
-    def __str__(n):
-        return f"[{n.L} {n.H} {n.R}]"
+    def show(n, function=False):
+        lparen = '{' if function else '['
+        rparen = '}' if function else ']'
+        return f"{lparen}{n.L} {n.H} {n.R}{rparen}"
 
-    def __repr__(n):
-        return f"[{n.L} {n.H} {n.R}]"
+    def __repr__(self):
+        return self.show()
+
 
 class TT(Enum):
     COMMENT = 1

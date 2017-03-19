@@ -21,17 +21,20 @@ def apply_fn(a, b, env):
     return Eval(Tree(fn.tt, a, fn, Void), env)
 
 
+def cons(a, dot, b, env):
+    return Tree(TT.PUNCTUATION, a, Leaf(TT.PUNCTUATION, dot), b)
+
 BUILTINS = {
     "+": lambda a, b, env: Leaf(TT.NUM, a.w + b.w),
     "-": lambda a, b, env: Leaf(TT.NUM, a.w - b.w),
     "*": lambda a, b, env: Leaf(TT.NUM, a.w * b.w),
     "/": lambda a, b, env: Leaf(TT.NUM, a.w // b.w),
-    ".": lambda a, b, env: Tree(TT.PUNCTUATION, a, ".", b),
-    ":": lambda a, b, env: Tree(TT.PUNCTUATION, a, ":", b),
-    "|": lambda a, b, env: b,
     "$": lambda a, b, env: env.lookup(a.w, b),
     "@": lambda a, b, env: env.assign(b.w, a),
     "!": apply_fn,
+    "|": lambda a, b, env: b,
+    ".": lambda a, b, env: cons(a, ".", b, env),
+    ":": lambda a, b, env: cons(a, ":", b, env),
 }
 
 class Env:
