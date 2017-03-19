@@ -21,12 +21,12 @@ class ParseError(Exception):
 
 class Leaf:
 
-    def __init__(self, tt, x):
+    def __init__(self, tt, w):
         self.tt = tt
-        self.x = x
+        self.w = w
 
     def __repr__(n):
-        return str(f"{n.tt.name[:3].lower()}{n.x}")
+        return str(f"{n.tt.name[:3].lower()}{n.w}")
 
 
 class Tree:
@@ -152,10 +152,10 @@ def find_voids(toks):
             continue
         if x.tt == TT.LPAREN and y.tt == TT.RPAREN:
             continue_next = True
-            if parens_match(x.x, y.x):
+            if parens_match(x.w, y.w):
                 yield Leaf(TT.VOID, "VOID")
             else:
-                raise ParseError(f"Mismatched parentheses {x.x}{y.x}")
+                raise ParseError(f"Mismatched parentheses {x.w}{y.w}")
         else:
             yield x
 
@@ -204,7 +204,7 @@ def LParse(stream):
         # Handle H
         H = stream.pop()
         if H.tt == TT.LPAREN:
-            # Case when operator is wrapped in nested expression
+            # Case when operator is wrapped in nested ewpression
             LParse(stream)
             H = stream.pop()
 
@@ -228,7 +228,7 @@ def LParse(stream):
             R = stream.pop()
 
         Z = stream.pop()
-        if right_associative(Z.x):
+        if right_associative(Z.w):
             # Right associative operator found. Handle recursively
             LParse(stream)
             R = Tree(Z.tt, R, Z, stream.pop())
