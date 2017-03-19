@@ -61,16 +61,16 @@ def apply(x, env):
 
 
 def Eval(x, env):
-    if isinstance(x.H, Tree):
-        y = Eval(x.H, env)
-        y = Tree(x.L, y, x.R)
-        if y.tt == TT.PUNCTUATION:
-            y = apply(y, env)
-        x = Eval(y, env)
-
     if isinstance(x, Leaf):
         pass
     elif isinstance(x, Tree):
+        if isinstance(x.H, Tree):
+            y = Eval(x.H, env)
+            y = Tree(x.L, y, x.R)
+            if y.tt == TT.PUNCTUATION:
+                y = apply(y, env)
+            x = Eval(y, env)
+
         x = apply(x, env)
 
     return x

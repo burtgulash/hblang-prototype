@@ -55,7 +55,9 @@ class TT(Enum):
     SPACE = 8
     LPAREN = 9
     RPAREN = 10
-    END = 11
+    THUNK = 11
+    FUNCTION = 12
+    END = 13
 
 def comment(tok):
     return tok[1:-1]
@@ -192,11 +194,17 @@ def LParse(stream):
         # Handle L
         L = stream.pop()
         if L.tt == TT.LPAREN:
+            paren_type = L.w
             # Case when first token is a nested expression
             LParse(stream)
             if len(stream) == 1:
                 break
+
             L = stream.pop()
+            if paren_type == '[':
+                L = Leaf(TT.THUNK, L)
+            elif paren_type == '{':
+                L = Leaf(TT.FUNCTION, L)
 
         # This must be handled by lexing void
         assert L.tt != TT.RPAREN
