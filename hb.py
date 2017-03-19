@@ -3,7 +3,7 @@
 import sys
 
 import readline
-from c import Lex, Parse, ParseError, TT, Node, Tok
+from c import Lex, LexTransform, Parse, ParseError, TT, Node, Tok
 
 readline.parse_and_bind('tab: complete')
 readline.parse_and_bind('set editing-mode vi')
@@ -70,7 +70,8 @@ def Repl(prompt="> "):
         try:
             y = input(prompt)
             y = Lex(y)
-            #print("LEX", y)
+            y = LexTransform(y)
+            print("LEX", y)
             y = Parse(y)
             #y = Eval(y, env)
             if y is not None:

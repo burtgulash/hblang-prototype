@@ -9,6 +9,11 @@ from typing import NamedTuple, Any
 def right_associative(x):
     return x and x in ":$"
 
+def parens_match(left, right):
+    return ((left == "(" and right == ")")
+         or (left == "[" and right == "]")
+         or (left == "{" and right == "}"))
+
 
 class ParseError(Exception):
     pass
@@ -101,23 +106,16 @@ def symbol(tok):
 def void(tok):
     return re.sub(f"{SPACE_RX}+", "", tok)
 
-SYMBOL_RX = "[a-zA-Z][a-zA-Z0-9_]*"
-SPACE_RX = "[ \t\n]"
 
 def lex_(text):
     rules = (
         (TT.NUM, num, "[_0-9]+"),
-        (TT.SYMBOL, identity, SYMBOL_RX),
-        (TT.VOID, void, (f"\\({SPACE_RX}*\\)"
-                         f"|\\{{{SPACE_RX}*\\}}"
-                         f"|\\[{SPACE_RX}*\\]")),
-
-        # use backtick for symbol because of bash escaping
+        (TT.SYMBOL, identity, "[a-zA-Z][a-zA-Z0-9_]*"),
         (TT.STRING, string, '"(?:[^"]|\\\\")*"'),
         (TT.COMMENT, comment, "#.*\n"),
         (TT.PUNCTUATION, identity, "[!$%&*+,-./:;<=>?@\\^`~]"),
         (TT.SEPARATOR, identity, "[|]"),
-        (TT.SPACE, identity, f"{SPACE_RX}+"),
+        (TT.SPACE, identity, "[ \t\n\r]+"),
         (TT.LPAREN, identity, "[({[]"),
         (TT.RPAREN, identity, "[]})]"),
     )
@@ -136,24 +134,46 @@ def lex_(text):
 
 def Lex(text):
     # add extra newline at the end as a sentinel for comments
-    toks = lex_(text + "\n")
-
-    # Remove insignificant tokens - spaces and comments
-    toks = (tok for tok in toks if tok.tt not in (TT.SPACE, TT.COMMENT))
-    toks = list(toks)
+    toks = list(lex_(text + "\n"))
 
     # Remove the \n sentinel if it wasn't used by comment
     if toks[-1].tt == TT.SEPARATOR:
         toks = toks[:-1]
 
+    # Add EOF token
+    return toks + [Tok(TT.END, "END")]
+
+
+def find_voids(toks):
+    continue_next = False
+    for x, y in zip(toks, toks[1:] + [toks[:-1]]):
+        if continue_next:
+            continue_next = False
+            continue
+        if x.tt == TT.LPAREN and y.tt == TT.RPAREN:
+            continue_next = True
+            if parens_match(x.x, y.x):
+                yield Tok(TT.VOID, "VOID")
+            else:
+                raise ParseError(f"Mismatched parentheses {x.x}{y.x}")
+        else:
+            yield x
+
+
+def LexTransform(toks):
+    # Remove insignificant tokens - spaces and comments
+    toks = [tok for tok in toks if tok.tt not in (TT.SPACE, TT.COMMENT)]
+
+    # Change (), [], {} to VOID
+    toks = list(find_voids(toks))
+
     # Check for correctness
-    n_toks = len([x for x in toks if x.tt not in (TT.LPAREN, TT.RPAREN)])
+    n_toks = len([x for x in toks
+                  if x.tt not in (TT.LPAREN, TT.RPAREN, TT.END)])
     if n_toks % 2 == 0:
         raise ParseError(f"Even number [{n_toks}] of tokens."
                          " Only odd allowed.")
 
-    # Add EOF token
-    toks = toks + [Tok(TT.END, "")]
     return toks
 
 
