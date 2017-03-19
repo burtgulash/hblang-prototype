@@ -24,7 +24,7 @@ class Env:
 
     def __init__(self, parent, from_dict=None):
         self.parent = parent
-        self.e = {**from_dict} or {}
+        self.e = {**(from_dict or {})}
 
     def lookup(self, name, or_else):
         env = self.find_env(name)
@@ -67,6 +67,7 @@ def apply_thunk(L, H, R, env):
     return Eval(H, env)
 
 def apply_function(L, H, R, env):
+    # TODO handle tail recursion only when F gets called last
     F = Leaf(TT.THUNK, H)
     env = Env(env)
     env.bind("F", F)
@@ -81,23 +82,27 @@ def Eval(x, env):
             return x.H
 
         if isinstance(x.H, Tree):
-            print("ISTREE", x.tt)
-            x = Eval(x.H, env)
+            # TODO don't override Tree node. Create new one instead
+            x.H = Eval(x.H, env)
 
-        print("TT", x, x.H, x.H.tt)
         if x.H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
             op = env.lookup(x.H.w, None)
             assert op is not None
             if op.tt == TT.BUILTIN:
                 return apply(x.L, op.w, x.R, env)
-            if op.tt == TT.FUNCTION:
+            elif op.tt == TT.THUNK:
+                return apply_thunk(x.L, op.w, x.R, env)
+            elif op.tt == TT.FUNCTION:
                 return apply_function(x.L, op.w, x.R, env)
+            raise AssertionError(f"Operation has type {op.tt}")
+        elif x.H.tt == TT.BUILTIN:
+            return apply(x.L, x.H.w, x.R, env)
         elif x.H.tt == TT.THUNK:
             return apply_thunk(x.L, x.H.w, x.R, env)
         elif x.H.tt == TT.FUNCTION:
             return apply_function(x.L, x.H.w, x.R, env)
-
-    assert False
+        raise AssertionError(f"Can't process type {x.H.tt}")
+    raise AssertionError(f"Unknown type {type(x)}")
 
 
 def Repl(prompt="> "):
@@ -110,7 +115,7 @@ def Repl(prompt="> "):
             y = LexTransform(y)
             #print("LEX", y)
             y = Parse(y)
-            print("PARSE", y)
+            # print("PARSE", y)
             y = Eval(y, env)
             if y is not None:
                 print(y)
