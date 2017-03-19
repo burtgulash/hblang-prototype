@@ -111,7 +111,7 @@ def lex_(text):
     rules = (
         (TT.NUM, num, "[_0-9]+"),
         (TT.SYMBOL, identity, "[a-zA-Z][a-zA-Z0-9_]*"),
-        (TT.STRING, string, '"(?:[^"]|\\\\")*"'),
+        (TT.STRING, string, r'"(\\.|[^"])*"'),
         (TT.COMMENT, comment, "#.*\n"),
         (TT.PUNCTUATION, identity, "[!$%&*+,-./:;<=>?@\\^`~]"),
         (TT.SEPARATOR, identity, "[|]"),
