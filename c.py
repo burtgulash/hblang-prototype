@@ -43,7 +43,6 @@ class Tree:
     def __repr__(n):
         return f"[{n.L} {n.H} {n.R}]"
 
-
 class TT(Enum):
     COMMENT = 1
     VOID = 2
@@ -59,6 +58,10 @@ class TT(Enum):
     FUNCTION = 12
     BUILTIN = 13
     END = 14
+
+
+Void = Leaf(TT.VOID, "void")
+
 
 def comment(tok):
     return tok[1:-1]
@@ -156,7 +159,7 @@ def find_voids(toks):
         if x.tt == TT.LPAREN and y.tt == TT.RPAREN:
             continue_next = True
             if parens_match(x.w, y.w):
-                yield Leaf(TT.VOID, "VOID")
+                yield Void
             else:
                 raise ParseError(f"Mismatched parentheses {x.w}{y.w}")
         else:

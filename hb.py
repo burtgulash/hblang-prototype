@@ -3,10 +3,23 @@
 import sys
 
 import readline
-from c import Lex, LexTransform, Parse, ParseError, TT, Tree, Leaf
+from c import Lex, LexTransform, Parse, \
+              ParseError, TT, Tree, Leaf, Void
 
 readline.parse_and_bind('tab: complete')
 readline.parse_and_bind('set editing-mode vi')
+
+def apply_fn(a, b, env):
+    if b.tt == TT.SYMBOL:
+        fn = env.lookup(b.w, None)
+        if fn is None:
+            raise Exception(f"Function not found: {b.w}")
+    elif b.tt in (TT.THUNK, TT.FUNCTION):
+        fn = b
+    else:
+        raise AssertionError(f"Apply_fn can't be applied to {b.tt}")
+    return Eval(Tree(fn.tt, a, fn, Void), env)
+
 
 BUILTINS = {
     "+": lambda a, b, env: Leaf(TT.NUM, a.w + b.w),
@@ -18,6 +31,7 @@ BUILTINS = {
     "|": lambda a, b, env: b,
     "$": lambda a, b, env: env.lookup(a.w, b),
     "@": lambda a, b, env: env.assign(b.w, a),
+    "!": apply_fn,
 }
 
 class Env:
@@ -48,61 +62,44 @@ class Env:
         return value
 
 
-def apply(L, H, R, env):
-    if isinstance(L, Tree):
-        L = Eval(L, env)
-    if isinstance(R, Tree):
-        R = Eval(R, env)
-
-    return H(L, R, env)
-
-def apply_thunk(L, H, R, env):
-    if isinstance(L, Tree):
-        L = Eval(L, env)
-    if isinstance(R, Tree):
-        R = Eval(R, env)
-
-    env.bind("x", L)
-    env.bind("y", R)
-    return Eval(H, env)
-
-def apply_function(L, H, R, env):
-    # TODO handle tail recursion only when F gets called last
-    F = Leaf(TT.THUNK, H)
-    env = Env(env)
-    env.bind("F", F)
-    return apply_thunk(L, F.w, R, env)
-
-
 def Eval(x, env):
-    if isinstance(x, Leaf):
-        return x
-    elif isinstance(x, Tree):
-        if x.H.tt == TT.VOID:
-            return x.H
+    while True:
+        # print("EVAL", x, file=sys.stderr)
+        if isinstance(x, Leaf):
+            return x
 
-        if isinstance(x.H, Tree):
-            # TODO don't override Tree node. Create new one instead
-            x.H = Eval(x.H, env)
+        assert isinstance(x, Tree)
+        L, H, R = x.L, x.H, x.R
 
-        if x.H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
-            op = env.lookup(x.H.w, None)
+        if isinstance(L, Tree):
+            L = Eval(L, env)
+        if isinstance(R, Tree):
+            R = Eval(R, env)
+
+        if H.tt == TT.VOID:
+            return H
+        elif isinstance(H, Tree):
+            H = Eval(H, env)
+            x = Tree(H.tt, L, H, R)
+        elif H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
+            op = env.lookup(H.w, None)
             assert op is not None
-            if op.tt == TT.BUILTIN:
-                return apply(x.L, op.w, x.R, env)
-            elif op.tt == TT.THUNK:
-                return apply_thunk(x.L, op.w, x.R, env)
-            elif op.tt == TT.FUNCTION:
-                return apply_function(x.L, op.w, x.R, env)
-            raise AssertionError(f"Operation has type {op.tt}")
-        elif x.H.tt == TT.BUILTIN:
-            return apply(x.L, x.H.w, x.R, env)
-        elif x.H.tt == TT.THUNK:
-            return apply_thunk(x.L, x.H.w, x.R, env)
-        elif x.H.tt == TT.FUNCTION:
-            return apply_function(x.L, x.H.w, x.R, env)
-        raise AssertionError(f"Can't process type {x.H.tt}")
-    raise AssertionError(f"Unknown type {type(x)}")
+            assert op.tt in (TT.BUILTIN, TT.THUNK, TT.FUNCTION)
+            x = Tree(op.tt, L, op, R)
+        elif H.tt == TT.BUILTIN:
+            return H.w(L, R, env)
+        elif H.tt == TT.THUNK:
+            env.bind("x", L)
+            env.bind("y", R)
+            x = H.w
+        elif H.tt == TT.FUNCTION:
+            env = Env(env)
+            env.bind("F", H)
+            env.bind("x", L)
+            env.bind("y", R)
+            x = H.w
+        else:
+            raise AssertionError(f"Can't process: {H} of {H.tt}")
 
 
 def Repl(prompt="> "):
