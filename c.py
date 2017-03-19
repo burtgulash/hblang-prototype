@@ -19,7 +19,7 @@ class ParseError(Exception):
     pass
 
 
-class Tok:
+class Leaf:
 
     def __init__(self, tt, x):
         self.tt = tt
@@ -29,19 +29,19 @@ class Tok:
         return str(f"{n.tt.name[:3].lower()}{n.x}")
 
 
-class Node:
+class Tree:
 
-    def __init__(self, tt, L, X, R):
+    def __init__(self, tt, L, H, R):
         self.tt = tt
         self.L = L
-        self.X = X
+        self.H = H
         self.R = R
 
     def __str__(n):
-        return f"[{n.L} {n.X} {n.R}]"
+        return f"[{n.L} {n.H} {n.R}]"
 
     def __repr__(n):
-        return f"[{n.L} {n.X} {n.R}]"
+        return f"[{n.L} {n.H} {n.R}]"
 
 
 class TT(Enum):
@@ -129,7 +129,7 @@ def lex_(text):
         tt = TT[tt_name]
         tok = x.group(tt_name)
         tok = transform[tt_name](tok)
-        yield Tok(tt, tok)
+        yield Leaf(tt, tok)
 
 
 def Lex(text):
@@ -141,7 +141,7 @@ def Lex(text):
         toks = toks[:-1]
 
     # Add EOF token
-    return toks + [Tok(TT.END, "END")]
+    return toks + [Leaf(TT.END, "END")]
 
 
 def find_voids(toks):
@@ -153,7 +153,7 @@ def find_voids(toks):
         if x.tt == TT.LPAREN and y.tt == TT.RPAREN:
             continue_next = True
             if parens_match(x.x, y.x):
-                yield Tok(TT.VOID, "VOID")
+                yield Leaf(TT.VOID, "VOID")
             else:
                 raise ParseError(f"Mismatched parentheses {x.x}{y.x}")
         else:
@@ -201,21 +201,21 @@ def LParse(stream):
         # This must be handled by lexing void
         assert L.tt != TT.RPAREN
 
-        # Handle X
-        X = stream.pop()
-        if X.tt == TT.LPAREN:
+        # Handle H
+        H = stream.pop()
+        if H.tt == TT.LPAREN:
             # Case when operator is wrapped in nested expression
             LParse(stream)
-            X = stream.pop()
+            H = stream.pop()
 
-        if X.tt == TT.SEPARATOR:
+        if H.tt == TT.SEPARATOR:
             # Expression is separated by |
             LParse(stream)
             R = stream.pop()
-            stream.append(Node(X.tt, L, X, R))
+            stream.append(Tree(H.tt, L, H, R))
             break
 
-        if end_of_expr(X):
+        if end_of_expr(H):
             # End of expression
             stream.append(L)
             break
@@ -231,15 +231,15 @@ def LParse(stream):
         if right_associative(Z.x):
             # Right associative operator found. Handle recursively
             LParse(stream)
-            R = Node(Z.tt, R, Z, stream.pop())
-            stream.append(Node(X.tt, L, X, R))
+            R = Tree(Z.tt, R, Z, stream.pop())
+            stream.append(Tree(H.tt, L, H, R))
             break
         else:
             # Else just return the lookahead token back
             stream.append(Z)
 
-        # Create new node from L, X, R gathered above
-        stream.append(Node(X.tt, L, X, R))
+        # Create new node from L, H, R gathered above
+        stream.append(Tree(H.tt, L, H, R))
 
 
 if __name__ == "__main__":

@@ -3,18 +3,18 @@
 import sys
 
 import readline
-from c import Lex, LexTransform, Parse, ParseError, TT, Node, Tok
+from c import Lex, LexTransform, Parse, ParseError, TT, Tree, Leaf
 
 readline.parse_and_bind('tab: complete')
 readline.parse_and_bind('set editing-mode vi')
 
 global_env = {
-    "+": lambda a, b: Tok(TT.NUM, a + b),
-    "-": lambda a, b: Tok(TT.NUM, a - b),
-    "*": lambda a, b: Tok(TT.NUM, a * b),
-    "/": lambda a, b: Tok(TT.NUM, a // b),
-    ".": lambda a, b: Node(TT.PUNCTUATION, a, ".", b),
-    ":": lambda a, b: Node(TT.PUNCTUATION, a, ":", b),
+    "+": lambda a, b: Leaf(TT.NUM, a + b),
+    "-": lambda a, b: Leaf(TT.NUM, a - b),
+    "*": lambda a, b: Leaf(TT.NUM, a * b),
+    "/": lambda a, b: Leaf(TT.NUM, a // b),
+    ".": lambda a, b: Tree(TT.PUNCTUATION, a, ".", b),
+    ":": lambda a, b: Tree(TT.PUNCTUATION, a, ":", b),
 }
 
 class Env:
@@ -51,9 +51,9 @@ class Env:
 def apply(x, env):
     L, X, R = x.L, x.X, x.R
     op = env.lookup(X.x)
-    if isinstance(x.L, Node):
+    if isinstance(x.L, Tree):
         L = Eval(x.L, env)
-    if isinstance(x.R, Node):
+    if isinstance(x.R, Tree):
         R = Eval(x.R, env)
     return op(L.x, R.x)
 
