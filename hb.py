@@ -95,9 +95,7 @@ def Eval(x, env):
         elif H.tt == TT.FUNCTION:
             env = Env(env)
             env.bind("F", H)
-            env.bind("x", L)
-            env.bind("y", R)
-            x = H.w
+            x = Tree(H.tt, L, H.w, R)
         else:
             raise AssertionError(f"Can't process: {H} of {H.tt}")
 
