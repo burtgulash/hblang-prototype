@@ -195,9 +195,9 @@ def end_of_expr(x):
 
 def quote(stream, paren_type):
     x = stream.pop()
-    if paren_type in '{[':
+    if paren_type == '[':
         x = Leaf(TT.THUNK, x)
-    if paren_type == '{':
+    elif paren_type == '{':
         x = Leaf(TT.FUNCTION, x)
     return x
 
