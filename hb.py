@@ -9,6 +9,17 @@ from c import Lex, LexTransform, Parse, \
 readline.parse_and_bind('tab: complete')
 readline.parse_and_bind('set editing-mode vi')
 
+def get_type(a, b, env):
+    return Leaf(TT.SYMBOL, a.tt.name)
+
+def then(a, b, env):
+    assert b.tt == TT.PUNCTUATION and isinstance(b, Tree)
+    conseq = b.R if a.w == 0 else b.L
+    if conseq.tt in (TT.FUNCTION, TT.THUNK):
+        conseq = conseq.w
+    return Eval(conseq, env)
+
+
 def apply_fn(a, b, env):
     if b.tt == TT.SYMBOL:
         fn = env.lookup(b.w, None)
@@ -29,9 +40,13 @@ BUILTINS = {
     "-": lambda a, b, env: Leaf(TT.NUM, a.w - b.w),
     "*": lambda a, b, env: Leaf(TT.NUM, a.w * b.w),
     "/": lambda a, b, env: Leaf(TT.NUM, a.w // b.w),
+    "=": lambda a, b, env: Leaf(TT.NUM, 1 if a.w == b.w else 0),
     "$": lambda a, b, env: env.lookup(a.w, b),
     "@": lambda a, b, env: env.assign(b.w, a),
+    "?": then,
+    "then": then,
     "!": apply_fn,
+    "t": get_type,
     "|": lambda a, b, env: b,
     ".": lambda a, b, env: cons(a, ".", b, env),
     ":": lambda a, b, env: cons(a, ":", b, env),
@@ -86,7 +101,8 @@ def Eval(x, env):
             x = Tree(H.tt, L, H, R)
         elif H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
             op = env.lookup(H.w, None)
-            assert op is not None
+            if op is None:
+                raise Exception(f"Operator not found {H.w}")
             assert op.tt in (TT.BUILTIN, TT.THUNK, TT.FUNCTION)
             x = Tree(op.tt, L, op, R)
         elif H.tt == TT.BUILTIN:
