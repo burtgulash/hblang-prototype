@@ -20,18 +20,8 @@ def then(a, b, env):
         conseq = conseq.w
     return conseq
 
-
-def apply_fn(a, b, env):
-    if b.tt == TT.SYMBOL:
-        fn = env.lookup(b.w, None)
-        if fn is None:
-            raise Exception(f"Function not found: {b.w}")
-    elif b.tt in (TT.THUNK, TT.FUNCTION):
-        fn = b
-    else:
-        raise AssertionError(f"Apply_fn can't be applied to {b.tt}")
-    return Eval(Tree(fn.tt, a, fn, Void), env)
-
+le = lambda a, b, env: Leaf(TT.NUM, 1 if a.w < b.w else 0),
+ge = lambda a, b, env: Leaf(TT.NUM, 1 if a.w > b.w else 0),
 
 BUILTINS = {
     "+": lambda a, b, env: Leaf(TT.NUM, a.w + b.w),
@@ -39,11 +29,16 @@ BUILTINS = {
     "*": lambda a, b, env: Leaf(TT.NUM, a.w * b.w),
     "/": lambda a, b, env: Leaf(TT.NUM, a.w // b.w),
     "=": lambda a, b, env: Leaf(TT.NUM, 1 if a.w == b.w else 0),
+    "<": le,
+    ">": ge,
+    "le": le,
+    "ge": ge,
+    "lte": lambda a, b, env: Leaf(TT.NUM, 1 if a.w <= b.w else 0),
+    "gte": lambda a, b, env: Leaf(TT.NUM, 1 if a.w >= b.w else 0),
     "$": lambda a, b, env: env.lookup(b.w, a),
     "@": lambda a, b, env: env.assign(b.w, a),
     "?": then,
     "then": then,
-    "!": apply_fn,
     "t": get_type,
     "|": lambda a, b, env: b,
 }
@@ -87,6 +82,10 @@ def Eval(x, env):
 
         if isinstance(L, Tree):
             L = Eval(L, env)
+        if H.tt == TT.SEPARATOR:
+            # Tail recurse on separator '|'
+            x = R
+            continue
         if isinstance(R, Tree):
             R = Eval(R, env)
 
@@ -96,11 +95,11 @@ def Eval(x, env):
 
         if H.tt == TT.VOID:
             return H
-        elif H.tt == TT.PUNCTUATION and H.w in ".:":
-            return Tree(H.tt, L, H, R)
         elif isinstance(H, Tree):
             H = Eval(H, env)
             x = Tree(H.tt, L, H, R)
+        elif H.tt == TT.PUNCTUATION and H.w in ".:":
+            return Tree(H.tt, L, H, R)
         elif H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
             op = env.lookup(H.w, None)
             if op is None:
@@ -112,7 +111,11 @@ def Eval(x, env):
         elif H.tt == TT.THUNK:
             x = H.w
         elif H.tt == TT.FUNCTION:
-            env = Env(env)
+            # Don't create new env in optimizing tail call
+            self_f = env.lookup("self", None)
+            parent_env = env.parent if self_f is H else env
+
+            env = Env(parent_env)
             env.bind("self", H)
             env.bind("x", L)
             env.bind("y", R)

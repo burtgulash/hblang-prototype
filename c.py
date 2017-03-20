@@ -56,11 +56,11 @@ class Tree:
         #return f"{lparen}{n.L} {n.H} {n.R}{rparen}"
         if n.H.tt == TT.SEPARATOR:
             return f"{n.L} |({n.R})"
-        if n.H.tt == TT.PUNCTUATION and right_associative(n.H.w):
-            return f" {n.L}{n.H}{n.R}"
         if n.H.tt == TT.SYMBOL:
             return f"({n.L} {n.H} {n.R})"
         if n.H.tt == TT.PUNCTUATION:
+            if isinstance(n.H, Leaf) and right_associative(n.H.w):
+                return f" {n.L}{n.H}{n.R}"
             return f"({n.L} {n.H}{n.R})"
         return f"{n.L} {n.H}{n.R}"
 
