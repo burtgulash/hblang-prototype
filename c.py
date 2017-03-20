@@ -32,7 +32,14 @@ class Leaf:
         return str(n.w)
 
     def __repr__(self):
-        return self.show()
+        if self.tt == TT.FUNCTION:
+            return f"{{{self.w}}}"
+        if self.tt == TT.THUNK:
+            return f"[{self.w}]"
+        if self.tt in (TT.PUNCTUATION, TT.NUM,
+                       TT.SYMBOL, TT.STRING, TT.SEPARATOR):
+            return str(self.w)
+        return f"({self.w})"
 
 
 class Tree:
@@ -46,7 +53,16 @@ class Tree:
     def show(n, function=False):
         lparen = '{' if function else '['
         rparen = '}' if function else ']'
-        return f"{lparen}{n.L} {n.H} {n.R}{rparen}"
+        #return f"{lparen}{n.L} {n.H} {n.R}{rparen}"
+        if n.H.tt == TT.SEPARATOR:
+            return f"{n.L} |({n.R})"
+        if n.H.tt == TT.PUNCTUATION and right_associative(n.H.w):
+            return f" {n.L}{n.H}{n.R}"
+        if n.H.tt == TT.SYMBOL:
+            return f"({n.L} {n.H} {n.R})"
+        if n.H.tt == TT.PUNCTUATION:
+            return f"({n.L} {n.H}{n.R})"
+        return f"{n.L} {n.H}{n.R}"
 
     def __repr__(self):
         return self.show()
@@ -110,7 +126,7 @@ def unescape(s):
         yield c
 
 def string(tok):
-    tok = tok[1:-1]
+    #tok = tok[1:-1]
     return "".join(unescape(tok))
 
 def symbol(tok):
