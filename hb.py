@@ -12,12 +12,17 @@ readline.parse_and_bind('set editing-mode vi')
 def get_type(a, b, env):
     return Leaf(TT.SYMBOL, a.tt.name)
 
-def then(a, b, env):
+
+def consequence(a, b):
     assert b.tt == TT.PUNCTUATION and isinstance(b, Tree)
     conseq = b.R if a.w == 0 else b.L
     if conseq.tt in (TT.FUNCTION, TT.THUNK):
         conseq = conseq.w
-    return Eval(conseq, env)
+    return conseq
+
+
+def then(a, b, env):
+    return Eval(consequence(a, b), env)
 
 
 def apply_fn(a, b, env):
@@ -41,7 +46,7 @@ BUILTINS = {
     "*": lambda a, b, env: Leaf(TT.NUM, a.w * b.w),
     "/": lambda a, b, env: Leaf(TT.NUM, a.w // b.w),
     "=": lambda a, b, env: Leaf(TT.NUM, 1 if a.w == b.w else 0),
-    "$": lambda a, b, env: env.lookup(a.w, b),
+    "$": lambda a, b, env: env.lookup(b.w, a),
     "@": lambda a, b, env: env.assign(b.w, a),
     "?": then,
     "then": then,
@@ -82,7 +87,6 @@ class Env:
 
 def Eval(x, env):
     while True:
-        # print("EVAL", x, file=sys.stderr)
         if isinstance(x, Leaf):
             return x
 
@@ -94,17 +98,30 @@ def Eval(x, env):
         if isinstance(R, Tree):
             R = Eval(R, env)
 
+        # print("EVAL", x, file=sys.stderr)
+        # print("L", L, file=sys.stderr)
+        # print("R", R, file=sys.stderr)
+
         if H.tt == TT.VOID:
             return H
         elif isinstance(H, Tree):
             H = Eval(H, env)
             x = Tree(H.tt, L, H, R)
         elif H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
-            op = env.lookup(H.w, None)
-            if op is None:
-                raise Exception(f"Operator not found {H.w}")
-            assert op.tt in (TT.BUILTIN, TT.THUNK, TT.FUNCTION)
-            x = Tree(op.tt, L, op, R)
+            # Optimize some of the operators
+            if H.w == '?':
+                # Tail recurse on conditions
+                x = consequence(L, R)
+            elif H.w == '$':
+                return env.lookup(R.w, L)
+            elif H.w in ".:":
+                return Tree(H.tt, L, H, R)
+            else:
+                op = env.lookup(H.w, None)
+                if op is None:
+                    raise Exception(f"Operator not found {H.w}")
+                assert op.tt in (TT.BUILTIN, TT.THUNK, TT.FUNCTION)
+                x = Tree(op.tt, L, op, R)
         elif H.tt == TT.BUILTIN:
             return H.w(L, R, env)
         elif H.tt == TT.THUNK:
@@ -113,10 +130,11 @@ def Eval(x, env):
             x = H.w
         elif H.tt == TT.FUNCTION:
             env = Env(env)
-            env.bind("F", H)
+            env.bind("self", H)
             env.bind("x", L)
             env.bind("y", R)
             x = H.w
+            # print("NEW ENV", env.e, file=sys.stderr)
         else:
             raise AssertionError(f"Can't process: {H} of {H.tt}")
 
