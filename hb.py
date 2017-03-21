@@ -26,8 +26,6 @@ def bake_(x, env):
             return Eval(x, env)
         L, H, R = unthunk(L, env), unthunk(H, env), unthunk(R, env)
         return Tree(H.tt, L, H, R)
-    if x.tt == TT.THUNK:
-        return x
     return unthunk(x, env)
 
 
