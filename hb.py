@@ -35,7 +35,7 @@ BUILTINS = {
     "ge": ge,
     "lte": lambda a, b, env: Leaf(TT.NUM, 1 if a.w <= b.w else 0),
     "gte": lambda a, b, env: Leaf(TT.NUM, 1 if a.w >= b.w else 0),
-    "$": lambda a, b, env: env.lookup(b.w, a),
+    "$": lambda a, b, env: env.lookup(a.w, b),
     "@": lambda a, b, env: env.assign(b.w, a),
     "?": then,
     "then": then,
@@ -72,32 +72,49 @@ class Env:
         return value
 
 
+def unthunk(x):
+    if x.tt == TT.THUNK:
+        return x.w
+    return x
+
+
 def Eval(x, env):
     while True:
         if isinstance(x, Leaf):
+            # Precompile functions here
+            if x.tt == TT.FUNCTION:
+                x = Leaf(x.tt, Eval(x.w, env))
             return x
 
         assert isinstance(x, Tree)
         L, H, R = x.L, x.H, x.R
 
-        if isinstance(L, Tree):
-            L = Eval(L, env)
+        L = Eval(L, env)
+        H = Eval(H, env)
+        x = Tree(H.tt, L, H, R)
+
         if H.tt == TT.SEPARATOR:
-            # Tail recurse on separator '|'
+            # Tail recurse on separator '|' before R gets evaluated
             x = R
             continue
-        if isinstance(R, Tree):
-            R = Eval(R, env)
+
+        R = Eval(R, env)
 
         # print("EVAL", x, file=sys.stderr)
         # print("L", L, file=sys.stderr)
         # print("R", R, file=sys.stderr)
 
-        if H.tt == TT.VOID:
-            return H
-        elif isinstance(H, Tree):
-            H = Eval(H, env)
-            x = Tree(H.tt, L, H, R)
+        if H.tt == TT.THUNK:
+            x = H.w
+        elif H.tt == TT.FUNCTION:
+            env = setenv(L, H, R, env)
+            x = H.w
+            if x.tt == TT.THUNK:
+                x = x.w
+        elif TT.THUNK in (L.tt, R.tt):
+            # Unthunk tree node
+            H = unthunk(H)
+            x = Leaf(TT.THUNK, Tree(H.tt, unthunk(L), H, unthunk(R)))
         elif H.tt == TT.PUNCTUATION and H.w in ".:":
             return Tree(H.tt, L, H, R)
         elif H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
@@ -108,22 +125,23 @@ def Eval(x, env):
             x = Tree(op.tt, L, op, R)
         elif H.tt == TT.BUILTIN:
             x = H.w(L, R, env)
-        elif H.tt == TT.THUNK:
-            x = H.w
-        elif H.tt == TT.FUNCTION:
-            # Don't create new env in optimizing tail call
-            self_f = env.lookup("self", None)
-            parent_env = env.parent if self_f is H else env
-
-            env = Env(parent_env)
-            env.bind("self", H)
-            env.bind("x", L)
-            env.bind("y", R)
-            x = H.w
-            # print("NEW ENV", env.e, file=sys.stderr)
+        elif H.tt == TT.VOID:
+            return H
         else:
             raise AssertionError(f"Can't process: {H} of {H.tt}")
 
+
+def setenv(L, H, R, env):
+    self_f = env.lookup("self", None)
+    parent_env = env.parent if self_f is H else env
+
+    env = Env(parent_env)
+    env.bind("self", H)
+    env.bind("x", L)
+    env.bind("y", R)
+
+    return env
+    
 
 def Repl(prompt="> "):
     builtins = {k: Leaf(TT.BUILTIN, x) for k, x in BUILTINS.items()}
