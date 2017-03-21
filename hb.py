@@ -13,6 +13,33 @@ def get_type(a, b, env):
     return Leaf(TT.SYMBOL, a.tt.name)
 
 
+def bake(a, _, env):
+    assert a.tt == TT.FUNCTION
+    return Leaf(TT.FUNCTION, bake_(a.w, env))
+
+
+def bake_(x, env):
+    if isinstance(x, Tree):
+        L, H, R = bake_(x.L, env), bake_(x.H, env), bake_(x.R, env)
+        if TT.THUNK not in (L.tt, H.tt, R.tt):
+            x = Tree(H.tt, L, H, R)
+            return Eval(x, env)
+        L, H, R = unthunk(L, env), unthunk(H, env), unthunk(R, env)
+        return Tree(H.tt, L, H, R)
+    if x.tt == TT.THUNK:
+        return x
+    return unthunk(x, env)
+
+
+def unthunk(x, env):
+    if x.tt == TT.THUNK:
+        return x.w
+    elif x.tt == TT.FUNCTION:
+        return x
+    return Eval(x, env)
+
+
+
 def then(a, b, env):
     assert b.tt == TT.PUNCTUATION and isinstance(b, Tree)
     conseq = b.R if a.w == 0 else b.L
@@ -41,6 +68,7 @@ BUILTINS = {
     "then": then,
     "t": get_type,
     "|": lambda a, b, env: b,
+    "bake": bake,
 }
 
 class Env:
@@ -72,18 +100,12 @@ class Env:
         return value
 
 
-def unthunk(x):
-    if x.tt == TT.THUNK:
-        return x.w
-    return x
-
-
 def Eval(x, env):
     while True:
         if isinstance(x, Leaf):
             # Precompile functions here
-            if x.tt == TT.FUNCTION:
-                x = Leaf(x.tt, Eval(x.w, env))
+            # if x.tt == TT.FUNCTION:
+            #     x = Leaf(x.tt, Eval(x.w, env))
             return x
 
         assert isinstance(x, Tree)
@@ -109,12 +131,9 @@ def Eval(x, env):
         elif H.tt == TT.FUNCTION:
             env = setenv(L, H, R, env)
             x = H.w
-            if x.tt == TT.THUNK:
-                x = x.w
-        elif TT.THUNK in (L.tt, R.tt):
-            # Unthunk tree node
-            H = unthunk(H)
-            x = Leaf(TT.THUNK, Tree(H.tt, unthunk(L), H, unthunk(R)))
+            # if x.tt == TT.THUNK:
+            #     x = x.w
+            #print("FUNC", env.e)
         elif H.tt == TT.PUNCTUATION and H.w in ".:":
             return Tree(H.tt, L, H, R)
         elif H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
@@ -132,16 +151,17 @@ def Eval(x, env):
 
 
 def setenv(L, H, R, env):
-    self_f = env.lookup("self", None)
-    parent_env = env.parent if self_f is H else env
+    #self_f = env.lookup("self", None)
+    #parent_env = env.parent if self_f is H else env
 
-    env = Env(parent_env)
+    #env = Env(parent_env)
+    env = Env(env)
     env.bind("self", H)
     env.bind("x", L)
     env.bind("y", R)
 
     return env
-    
+
 
 def Repl(prompt="> "):
     builtins = {k: Leaf(TT.BUILTIN, x) for k, x in BUILTINS.items()}
