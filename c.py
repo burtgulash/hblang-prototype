@@ -60,7 +60,7 @@ class Tree:
             return f"({n.L} {n.H} {n.R})"
         if n.H.tt == TT.PUNCTUATION:
             if isinstance(n.H, Leaf) and right_associative(n.H.w):
-                return f" {n.L}{n.H}{n.R}"
+                return f" ({n.L}{n.H}{n.R})"
             return f"({n.L} {n.H}{n.R})"
         return f"{n.L} {n.H}{n.R}"
 
@@ -226,6 +226,35 @@ def quote(stream, paren_type):
         x = Leaf(TT.FUNCTION, x)
     return x
 
+
+def RParse(stream):
+    rights = []
+    while True:
+        R = stream.pop()
+        if R.tt == TT.LPAREN:
+            LParse(stream)
+            R = quote(stream, R.w)
+
+        rights.append(R)
+        Y = stream.pop()
+
+        if not right_associative(Y.w):
+            stream.append(Y)
+            break
+
+        rights.append(Y)
+
+    # Reduce right stack to one final tree node
+    while len(rights) > 1:
+        R = rights.pop()
+        Y = rights.pop()
+        L = rights.pop()
+        rights.append(Tree(Y.tt, L, Y, R))
+
+    assert len(rights) == 1
+    return rights.pop()
+
+
 def LParse(stream):
     while len(stream) > 1:
         # Handle L
@@ -260,23 +289,8 @@ def LParse(stream):
             stream.append(L)
             break
 
-        # Handle R
-        R = stream.pop()
-        if R.tt == TT.LPAREN:
-            # Right parameter of expression is in nested subexpression
-            LParse(stream)
-            R = quote(stream, R.w)
-
-        Z = stream.pop()
-        if right_associative(Z.w):
-            # Right associative operator found. Handle recursively
-            LParse(stream)
-            R = Tree(Z.tt, R, Z, stream.pop())
-            stream.append(Tree(H.tt, L, H, R))
-            break
-        else:
-            # Else just return the lookahead token back
-            stream.append(Z)
+        # Parse right token, which could be right leaning
+        R = RParse(stream)
 
         # Create new node from L, H, R gathered above
         stream.append(Tree(H.tt, L, H, R))
