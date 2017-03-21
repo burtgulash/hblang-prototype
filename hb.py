@@ -15,7 +15,7 @@ def get_type(a, b, env):
 
 def bake(a, _, env):
     assert a.tt == TT.FUNCTION
-    return Leaf(TT.FUNCTION, bake_(a.w, env))
+    return Leaf(a.tt, bake_(a.w, env))
 
 
 def bake_(x, env):
@@ -69,6 +69,9 @@ BUILTINS = {
     "t": get_type,
     "|": lambda a, b, env: b,
     "bake": bake,
+    "L": lambda a, _, env: a.L,
+    "H": lambda a, _, env: a.H,
+    "R": lambda a, _, env: a.R,
 }
 
 class Env:
@@ -103,24 +106,24 @@ class Env:
 def Eval(x, env):
     while True:
         if isinstance(x, Leaf):
-            # Precompile functions here
-            # if x.tt == TT.FUNCTION:
-            #     x = Leaf(x.tt, Eval(x.w, env))
             return x
 
         assert isinstance(x, Tree)
         L, H, R = x.L, x.H, x.R
 
-        L = Eval(L, env)
-        H = Eval(H, env)
-        x = Tree(H.tt, L, H, R)
+        if isinstance(L, Tree):
+            L = Eval(L, env)
+        if isinstance(H, Tree):
+            H = Eval(H, env)
+        # x = Tree(H.tt, L, H, R) # TODO why this??
 
         if H.tt == TT.SEPARATOR:
             # Tail recurse on separator '|' before R gets evaluated
             x = R
             continue
 
-        R = Eval(R, env)
+        if isinstance(R, Tree):
+            R = Eval(R, env)
 
         # print("EVAL", x, file=sys.stderr)
         # print("L", L, file=sys.stderr)
@@ -131,9 +134,6 @@ def Eval(x, env):
         elif H.tt == TT.FUNCTION:
             env = setenv(L, H, R, env)
             x = H.w
-            # if x.tt == TT.THUNK:
-            #     x = x.w
-            #print("FUNC", env.e)
         elif H.tt == TT.PUNCTUATION and H.w in ".:":
             return Tree(H.tt, L, H, R)
         elif H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
@@ -151,11 +151,10 @@ def Eval(x, env):
 
 
 def setenv(L, H, R, env):
-    #self_f = env.lookup("self", None)
-    #parent_env = env.parent if self_f is H else env
+    self_f = env.lookup("self", None)
+    parent_env = env.parent if self_f is H else env
 
-    #env = Env(parent_env)
-    env = Env(env)
+    env = Env(parent_env)
     env.bind("self", H)
     env.bind("x", L)
     env.bind("y", R)
