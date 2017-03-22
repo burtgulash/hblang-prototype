@@ -69,6 +69,12 @@ def then(a, b, env):
 le = lambda a, b, env: Leaf(TT.NUM, 1 if a.w < b.w else 0),
 ge = lambda a, b, env: Leaf(TT.NUM, 1 if a.w > b.w else 0),
 
+def app(a, b, env):
+    if a.tt == "vec":
+        return Leaf("vec", a.w + [b.w])
+    return Leaf("vec", [a.w, b.w])
+
+
 BUILTINS = {
     "+": lambda a, b, env: Leaf(TT.NUM, a.w + b.w),
     "-": lambda a, b, env: Leaf(TT.NUM, a.w - b.w),
@@ -93,6 +99,12 @@ BUILTINS = {
     "R": lambda a, _, env: a.R,
     "open": lambda a, _, env: unwrap(a),
     "unwrap": lambda a, _, env: unwrap(a),
+    ",": app,
+    "vec": lambda a, _, env: Leaf("vec", []),
+}
+
+VARIABLES = {
+    "Vec": Leaf(TT.NUM, []),
 }
 
 class Env:
@@ -176,7 +188,9 @@ def Eval(x, env):
 
 def Repl(prompt="> "):
     builtins = {k: Leaf(TT.BUILTIN, x) for k, x in BUILTINS.items()}
+    builtins = {**builtins, **VARIABLES}
     env = Env(None, from_dict=builtins)
+
     while True:
         try:
             y = input(prompt)
