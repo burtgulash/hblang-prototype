@@ -6,16 +6,26 @@ import readline
 from c import Lex, LexTransform, Parse, \
               ParseError, TT, Tree, Leaf, Void
 
-readline.parse_and_bind('tab: complete')
-readline.parse_and_bind('set editing-mode vi')
+
+def setenv(H, env):
+    self_f = env.lookup("self", None)
+    parent_env = env.parent if self_f is H else env
+    env = Env(parent_env)
+    return env
+
 
 def get_type(a, b, env):
     return Leaf(TT.SYMBOL, a.tt.name)
 
 
+def unwrap(H):
+    assert H.tt in (TT.FUNCTION, TT.THUNK)
+    return H.w
+
+
 def bake(a, _, env):
     assert a.tt == TT.FUNCTION
-    return Leaf(a.tt, bake_(a.w, env))
+    return Leaf(a.tt, bake_2(unwrap(a), env))
 
 
 def bake_(x, env):
@@ -29,13 +39,24 @@ def bake_(x, env):
     return unthunk(x, env)
 
 
+def bake_2(x, env):
+    if isinstance(x, Tree):
+        L, H, R = bake_2(x.L, env), bake_2(x.H, env), bake_2(x.R, env)
+        x = Tree(H.tt, L, H, R)
+        #if TT.THUNK not in (L.tt, H.tt, R.tt):
+        #    x = Eval(x, env)
+    elif isinstance(x, Leaf) and x.tt == TT.THUNK:
+        x = unwrap(x)
+        #if x.tt != TT.THUNK:
+        #    x = Eval(x, env)
+    return x
+
 def unthunk(x, env):
     if x.tt == TT.THUNK:
         return x.w
     elif x.tt == TT.FUNCTION:
         return x
     return Eval(x, env)
-
 
 
 def then(a, b, env):
@@ -70,6 +91,8 @@ BUILTINS = {
     "L": lambda a, _, env: a.L,
     "H": lambda a, _, env: a.H,
     "R": lambda a, _, env: a.R,
+    "open": lambda a, _, env: unwrap(a),
+    "unwrap": lambda a, _, env: unwrap(a),
 }
 
 class Env:
@@ -128,10 +151,13 @@ def Eval(x, env):
         # print("R", R, file=sys.stderr)
 
         if H.tt == TT.THUNK:
-            x = H.w
+            x = unwrap(H)
         elif H.tt == TT.FUNCTION:
-            env = setenv(L, H, R, env)
-            x = H.w
+            env = setenv(H, env)
+            env.bind("self", H)
+            env.bind("x", L)
+            env.bind("y", R)
+            x = unwrap(H)
         elif H.tt == TT.PUNCTUATION and H.w in ".:":
             return Tree(H.tt, L, H, R)
         elif H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
@@ -146,18 +172,6 @@ def Eval(x, env):
             return H
         else:
             raise AssertionError(f"Can't process: {H} of {H.tt}")
-
-
-def setenv(L, H, R, env):
-    self_f = env.lookup("self", None)
-    parent_env = env.parent if self_f is H else env
-
-    env = Env(parent_env)
-    env.bind("self", H)
-    env.bind("x", L)
-    env.bind("y", R)
-
-    return env
 
 
 def Repl(prompt="> "):
@@ -181,4 +195,6 @@ def Repl(prompt="> "):
 
 
 if __name__ == "__main__":
+    readline.parse_and_bind('tab: complete')
+    readline.parse_and_bind('set editing-mode vi')
     Repl()
