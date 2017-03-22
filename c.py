@@ -2,12 +2,11 @@
 
 from enum import Enum
 import re
-from typing import NamedTuple, Any
-
 
 
 def right_associative(x):
     return x and x in ":$"
+
 
 def parens_match(left, right):
     return ((left == "(" and right == ")")
@@ -26,7 +25,7 @@ class Leaf:
         self.w = w
 
     def show(n, function=False):
-        #return str(f" {n.tt.name[:3].lower()}{n.w}")
+        # return str(f" {n.tt.name[:3].lower()}{n.w}")
         if isinstance(n.w, Tree):
             return n.w.show(function=n.tt == TT.FUNCTION)
         return str(n.w)
@@ -51,9 +50,9 @@ class Tree:
         self.R = R
 
     def show(n, function=False):
-        lparen = '{' if function else '['
-        rparen = '}' if function else ']'
-        #return f"{lparen}{n.L} {n.H} {n.R}{rparen}"
+        # lparen = '{' if function else '['
+        # rparen = '}' if function else ']'
+        # return f"{lparen}{n.L} {n.H} {n.R}{rparen}"
         if n.H.tt == TT.SEPARATOR:
             return f"{n.L} |({n.R})"
         if n.H.tt == TT.SYMBOL:
@@ -91,6 +90,7 @@ Void = Leaf(TT.VOID, "void")
 def comment(tok):
     return tok[1:-1]
 
+
 def num(tok):
     if tok == "_":
         return ["Num", "Inf"]
@@ -102,8 +102,10 @@ def num(tok):
     num = -num if negative else num
     return num
 
+
 def identity(x):
     return x
+
 
 def interpret(c):
     return {
@@ -114,28 +116,28 @@ def interpret(c):
         "'": "'",
     }[c]
 
+
 def unescape(s):
     escaped = False
     for c in s:
         if c == "\\":
-            escaped=True
+            escaped = True
             continue
         if escaped:
             c = interpret(c)
             escaped = False
         yield c
 
+
 def string(tok):
-    #tok = tok[1:-1]
+    # tok = tok[1:-1]
     return "".join(unescape(tok))
+
 
 def symbol(tok):
     assert tok[0] == "`"
     # return tok[1:]
     return tok
-
-def void(tok):
-    return re.sub(f"{SPACE_RX}+", "", tok)
 
 
 def lex_(text):
@@ -152,7 +154,7 @@ def lex_(text):
     )
     rx = (f"(?P<{tt.name}>{defn})" for tt, _, defn in rules)
     rx = "|".join(rx)
-    #print("DEBUG: lex by regex:", rx, file=sys.stderr)
+    # print("DEBUG: lex by regex:", rx, file=sys.stderr)
 
     transform = {tt.name: fn for tt, fn, _ in rules}
     for x in re.finditer(rx, text):
@@ -195,22 +197,23 @@ def LexTransform(toks):
     # Remove insignificant tokens - spaces and comments
     toks = [tok for tok in toks if tok.tt not in (TT.SPACE, TT.COMMENT)]
 
+    # TODO remove this obsoleted code
     # Change (), [], {} to VOID
-    toks = list(find_voids(toks))
+    # toks = list(find_voids(toks))
 
     # Check for correctness
-    n_toks = len([x for x in toks
-                  if x.tt not in (TT.LPAREN, TT.RPAREN, TT.END)])
-    if n_toks % 2 == 0:
-        raise ParseError(f"Even number [{n_toks}] of tokens."
-                         " Only odd allowed.")
+    # n_toks = len([x for x in toks
+    #               if x.tt not in (TT.LPAREN, TT.RPAREN, TT.END)])
+    # if n_toks % 2 == 0:
+    #     raise ParseError(f"Even number [{n_toks}] of tokens."
+    #                      " Only odd allowed.")
 
     return toks
 
 
 def Parse(toks):
     # Revert list of tokens to form a stack
-    stream = toks[::-1]
+    stream = list(toks)[::-1]
     LParse(stream)
     return stream.pop()
 
@@ -218,8 +221,8 @@ def Parse(toks):
 def end_of_expr(x):
     return x.tt in (TT.RPAREN, TT.END)
 
-def quote(stream, paren_type):
-    x = stream.pop()
+
+def quote(x, paren_type):
     if paren_type == '[':
         x = Leaf(TT.THUNK, x)
     elif paren_type == '{':
@@ -227,14 +230,21 @@ def quote(stream, paren_type):
     return x
 
 
+# Parse parenthesized subexpressions
+# TODO check parenthesis type here or in lexing?
+def ParenParse(stream):
+    x = stream.pop()
+    if x.tt == TT.LPAREN:
+        paren_type = x.w
+        LParse(stream)
+        x = quote(stream.pop(), paren_type)
+    return x
+
+
 def RParse(stream):
     rights = []
     while True:
-        R = stream.pop()
-        if R.tt == TT.LPAREN:
-            LParse(stream)
-            R = quote(stream, R.w)
-
+        R = ParenParse(stream)
         rights.append(R)
         Y = stream.pop()
 
@@ -258,25 +268,19 @@ def RParse(stream):
 def LParse(stream):
     while len(stream) > 1:
         # Handle L
-        L = stream.pop()
-        if L.tt == TT.LPAREN:
-            paren_type = L.w
-            # Case when first token is a nested expression
-            LParse(stream)
-            if len(stream) == 1:
-                break
-            L = quote(stream, paren_type)
+        L = ParenParse(stream)
+        if L.tt == TT.RPAREN:
+            # TODO check if they match at least
+            stream.append(Void)
+            break
 
-        # This must be handled by lexing void
-        assert L.tt != TT.RPAREN
+        # Case of non tree expression
+        if len(stream) == 1:
+            stream.append(L)
+            break
 
         # Handle H
-        H = stream.pop()
-        if H.tt == TT.LPAREN:
-            # Case when operator is wrapped in nested ewpression
-            LParse(stream)
-            H = quote(stream, H.w)
-
+        H = ParenParse(stream)
         if H.tt == TT.SEPARATOR:
             # Expression is separated by |
             LParse(stream)
