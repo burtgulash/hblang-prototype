@@ -97,6 +97,9 @@ def app(a, b, env):
         return Leaf("vec", a.w + [b.w])
     return Leaf("vec", [a.w, b.w])
 
+def P(a, _, env):
+    print(a)
+    return a
 
 BUILTINS = {
     "+": lambda a, b, env: Leaf(TT.NUM, a.w + b.w),
@@ -125,6 +128,7 @@ BUILTINS = {
     ",": app,
     "vec": lambda a, _, env: Leaf("vec", []),
     "callcc": callcc,
+    "P": P,
 }
 
 VARIABLES = {
