@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import time
 import sys
 
 import readline
@@ -101,6 +102,12 @@ def P(a, _, env):
     print(a)
     return a
 
+def wait(a, b, env):
+    assert b.tt == TT.NUM and b.w >= 0
+    time.sleep(b.w)
+    return a
+
+
 BUILTINS = {
     "+": lambda a, b, env: Leaf(TT.NUM, a.w + b.w),
     "-": lambda a, b, env: Leaf(TT.NUM, a.w - b.w),
@@ -129,6 +136,7 @@ BUILTINS = {
     "vec": lambda a, _, env: Leaf("vec", []),
     "callcc": callcc,
     "P": P,
+    "wait": wait,
 }
 
 VARIABLES = {
