@@ -7,6 +7,29 @@ from c import Lex, LexTransform, Parse, \
               ParseError, TT, Tree, Leaf, Void
 
 
+class Return(Exception):
+    pass
+
+
+def callcc(block, k, env):
+    assert block.tt in (TT.THUNK, TT.FUNCTION)
+    assert k.tt in (TT.SYMBOL, TT.STRING)
+
+    brk = Return()
+    def break_out(a, _, env):
+        brk.retval = a
+        raise brk
+
+    env = Env(env)
+    env.bind(k.w, Leaf(TT.BUILTIN, break_out))
+    try:
+        return Eval(Tree(block.tt, Void, block, Void), env)
+    except Return as ret:
+        if ret is brk:
+            return ret.retval
+        raise
+
+
 def setenv(H, env):
     self_f = env.lookup("self", None)
     parent_env = env.parent if self_f is H else env
@@ -101,6 +124,7 @@ BUILTINS = {
     "unwrap": lambda a, _, env: unwrap(a),
     ",": app,
     "vec": lambda a, _, env: Leaf("vec", []),
+    "callcc": callcc,
 }
 
 VARIABLES = {
