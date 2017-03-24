@@ -33,9 +33,9 @@ def callcc(block, k, env):
 
 def setenv(H, env):
     self_f = env.lookup("self", None)
-    parent_env = env.parent if self_f is H else env
-    env = Env(parent_env)
-    return env
+    if self_f is H:
+        return env
+    return Env(env)
 
 
 def get_type(a, b, env):
@@ -142,6 +142,7 @@ BUILTINS = {
 VARIABLES = {
     "Vec": Leaf(TT.NUM, []),
 }
+
 
 class Env:
 
