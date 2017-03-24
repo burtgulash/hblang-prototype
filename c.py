@@ -201,7 +201,7 @@ def Lex(text):
         if tok.debug is not None:
             tok.debug.lineno = lines
 
-    print("TOK", [(x, x.debug) for x in toks])
+    # print("TOK", [(x, x.debug) for x in toks])
 
     # Remove insignificant tokens - spaces and comments
     toks = [tok for tok in toks

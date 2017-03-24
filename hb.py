@@ -121,7 +121,8 @@ BUILTINS = {
     "lte": lambda a, b, env: Leaf(TT.NUM, 1 if a.w <= b.w else 0),
     "gte": lambda a, b, env: Leaf(TT.NUM, 1 if a.w >= b.w else 0),
     "$": lambda a, b, env: env.lookup(a.w, b),
-    "@": lambda a, b, env: env.assign(b.w, a),
+    "to": lambda a, b, env: env.assign(b.w, a),
+    "as": lambda a, b, env: env.bind(b.w, a),
     "?": then,
     "then": then,
     "t": get_type,
@@ -166,6 +167,7 @@ class Env:
 
     def bind(self, name, value):
         self.e[name] = value
+        return value
 
     def assign(self, name, value):
         env = self.find_env(name) or self
