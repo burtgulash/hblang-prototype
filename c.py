@@ -18,11 +18,25 @@ class ParseError(Exception):
     pass
 
 
+class DebugInfo:
+
+    def __init__(self, start, end):
+        self.start = start
+        self.end = end
+        self.lineno = None
+
+    def __repr__(self):
+        return (f"Debug(line={self.lineno}"
+                f", start={self.start}"
+                f", end={self.end})")
+
+
 class Leaf:
 
-    def __init__(self, tt, w):
+    def __init__(self, tt, w, debug=None):
         self.tt = tt
         self.w = w
+        self.debug = debug
 
     def show(n, function=False):
         # return str(f" {n.tt.name[:3].lower()}{n.w}")
@@ -82,6 +96,8 @@ class TT(Enum):
     FUNCTION = 12
     BUILTIN = 13
     END = 14
+    CLOSURE = 15
+    NEWLINE = 16
 
 
 Void = Leaf(TT.VOID, "void")
@@ -148,7 +164,8 @@ def lex_(text):
         (TT.COMMENT, comment, "#.*\n"),
         (TT.PUNCTUATION, identity, "[!$%&*+,-./:;<=>?@\\^`~]"),
         (TT.SEPARATOR, identity, "[|]"),
-        (TT.SPACE, identity, "[ \t\n\r]+"),
+        (TT.NEWLINE, identity, "[\n\r]+"),
+        (TT.SPACE, identity, "[ \t]+"),
         (TT.LPAREN, identity, "[({[]"),
         (TT.RPAREN, identity, "[]})]"),
     )
@@ -162,7 +179,8 @@ def lex_(text):
         tt = TT[tt_name]
         tok = x.group(tt_name)
         tok = transform[tt_name](tok)
-        yield Leaf(tt, tok)
+        span = x.span(x.lastindex)
+        yield Leaf(tt, tok, debug=DebugInfo(span[0], span[1]))
 
 
 def Lex(text):
@@ -170,44 +188,24 @@ def Lex(text):
     toks = list(lex_(text + "\n"))
 
     # Remove the \n sentinel if it wasn't used by comment
-    if toks[-1].tt == TT.SEPARATOR:
+    if toks[-1].tt == TT.NEWLINE:
         toks = toks[:-1]
 
     # Add EOF token
-    return toks + [Leaf(TT.END, "END")]
+    toks += [Leaf(TT.END, "END")]
 
+    lines = 0
+    for tok in toks:
+        if tok.tt in (TT.COMMENT, TT.NEWLINE):
+            lines += 1
+        if tok.debug is not None:
+            tok.debug.lineno = lines
 
-def find_voids(toks):
-    continue_next = False
-    for x, y in zip(toks, toks[1:] + [toks[:-1]]):
-        if continue_next:
-            continue_next = False
-            continue
-        if x.tt == TT.LPAREN and y.tt == TT.RPAREN:
-            continue_next = True
-            if parens_match(x.w, y.w):
-                yield Void
-            else:
-                raise ParseError(f"Mismatched parentheses {x.w}{y.w}")
-        else:
-            yield x
+    print("TOK", [(x, x.debug) for x in toks])
 
-
-def LexTransform(toks):
     # Remove insignificant tokens - spaces and comments
-    toks = [tok for tok in toks if tok.tt not in (TT.SPACE, TT.COMMENT)]
-
-    # TODO remove this obsoleted code
-    # Change (), [], {} to VOID
-    # toks = list(find_voids(toks))
-
-    # Check for correctness
-    # n_toks = len([x for x in toks
-    #               if x.tt not in (TT.LPAREN, TT.RPAREN, TT.END)])
-    # if n_toks % 2 == 0:
-    #     raise ParseError(f"Even number [{n_toks}] of tokens."
-    #                      " Only odd allowed.")
-
+    toks = [tok for tok in toks
+            if tok.tt not in (TT.SPACE, TT.COMMENT, TT.NEWLINE)]
     return toks
 
 

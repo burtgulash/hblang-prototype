@@ -4,7 +4,7 @@ import time
 import sys
 
 import readline
-from c import Lex, LexTransform, Parse, \
+from c import Lex, Parse, \
               ParseError, TT, Tree, Leaf, Void
 
 
@@ -232,7 +232,6 @@ def Repl(prompt="> "):
         try:
             y = input(prompt)
             y = Lex(y)
-            y = LexTransform(y)
             #print("LEX", y)
             y = Parse(y)
             # print("PARSE", y)
