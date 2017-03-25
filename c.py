@@ -101,6 +101,7 @@ class TT(Enum):
 
 
 Void = Leaf(TT.VOID, "void")
+EOF = Leaf(TT.END, "END")
 
 
 def comment(tok):
@@ -192,7 +193,7 @@ def Lex(text):
         toks = toks[:-1]
 
     # Add EOF token
-    toks += [Leaf(TT.END, "END")]
+    toks += [EOF]
 
     lines = 0
     for tok in toks:
@@ -212,12 +213,20 @@ def Lex(text):
 def Parse(toks):
     # Revert list of tokens to form a stack
     stream = list(toks)[::-1]
-    LParse(stream)
+    LParse(stream, EOF)
     return stream.pop()
 
 
 def end_of_expr(x):
     return x.tt in (TT.RPAREN, TT.END)
+
+
+def end_matches(end, expected):
+    # print("END", end, expected)
+    if end.tt == TT.RPAREN:
+        assert expected in ")]}"
+        return end.w == expected
+    return expected is EOF
 
 
 def quote(x, paren_type):
@@ -227,6 +236,13 @@ def quote(x, paren_type):
         x = Leaf(TT.FUNCTION, x)
     return x
 
+def opposite_paren(paren):
+    return {
+        "(": ")",
+        "[": "]",
+        "{": "}",
+    }[paren]
+
 
 # Parse parenthesized subexpressions
 # TODO check parenthesis type here or in lexing?
@@ -234,7 +250,7 @@ def ParenParse(stream):
     x = stream.pop()
     if x.tt == TT.LPAREN:
         paren_type = x.w
-        LParse(stream)
+        LParse(stream, opposite_paren(paren_type))
         x = quote(stream.pop(), paren_type)
     return x
 
@@ -263,7 +279,7 @@ def RParse(stream):
     return rights.pop()
 
 
-def LParse(stream):
+def LParse(stream, expected_end):
     while len(stream) > 1:
         # Handle L
         L = ParenParse(stream)
@@ -272,22 +288,26 @@ def LParse(stream):
             stream.append(Void)
             break
 
+        # TODO below chunk obsoleted by end of expr checking
         # Case of non tree expression
-        if len(stream) == 1:
-            stream.append(L)
-            break
+        # if len(stream) == 1:
+        #     stream.append(L)
+        #     break
 
         # Handle H
         H = ParenParse(stream)
         if H.tt == TT.SEPARATOR:
             # Expression is separated by |
-            LParse(stream)
+            LParse(stream, expected_end)
             R = stream.pop()
             stream.append(Tree(H.tt, L, H, R))
             break
 
         if end_of_expr(H):
             # End of expression
+            if not end_matches(H, expected_end):
+                raise ParseError(f"Parentheses don't match."
+                                 f"Expected {expected_end}, got {H.w}")
             stream.append(L)
             break
 
