@@ -123,6 +123,7 @@ BUILTINS = {
     "$": lambda a, b, env: env.lookup(a.w, b),
     "to": lambda a, b, env: env.assign(b.w, a),
     "as": lambda a, b, env: env.bind(b.w, a),
+    "is": lambda a, b, env: env.bind(a.w, b),
     "?": then,
     "then": then,
     "t": get_type,

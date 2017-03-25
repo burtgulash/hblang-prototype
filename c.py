@@ -288,12 +288,6 @@ def LParse(stream, expected_end):
             stream.append(Void)
             break
 
-        # TODO below chunk obsoleted by end of expr checking
-        # Case of non tree expression
-        # if len(stream) == 1:
-        #     stream.append(L)
-        #     break
-
         # Handle H
         H = ParenParse(stream)
         if H.tt == TT.SEPARATOR:
