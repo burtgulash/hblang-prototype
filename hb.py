@@ -12,7 +12,7 @@ class Return(Exception):
     pass
 
 
-def callcc(block, k, env):
+def callcc(block, k, sc, env):
     assert block.tt in (TT.THUNK, TT.FUNCTION)
     assert k.tt in (TT.SYMBOL, TT.STRING)
 
@@ -24,7 +24,7 @@ def callcc(block, k, env):
     env = Env(env)
     env.bind(k.w, Leaf(TT.BUILTIN, break_out))
     try:
-        return Eval(Tree(block.tt, Void, block, Void), env)
+        return Eval(Tree(block.tt, Void, block, Void), sc, env)
     except Return as ret:
         if ret is brk:
             return ret.retval
@@ -38,7 +38,7 @@ def setenv(H, env):
     return Env(env)
 
 
-def get_type(a, b, env):
+def get_type(a, b, sc, env):
     return Leaf(TT.SYMBOL, a.tt.name)
 
 
@@ -47,95 +47,95 @@ def unwrap(H):
     return H.w
 
 
-def bake(a, _, env):
+def bake(a, _, sc, env):
     assert a.tt == TT.FUNCTION
-    return Leaf(a.tt, bake_2(unwrap(a), env))
+    return Leaf(a.tt, bake_2(unwrap(a), sc, env))
 
 
-def bake_(x, env):
+# def bake_(x, sc, env):
+#     if isinstance(x, Tree):
+#         L, H, R = bake_(x.L, env), bake_(x.H, env), bake_(x.R, env)
+#         if TT.THUNK not in (L.tt, H.tt, R.tt):
+#             x = Tree(H.tt, L, H, R)
+#             return Eval(x, sc, env)
+#         L, H, R = unthunk(L, env), unthunk(H, env), unthunk(R, env)
+#         return Tree(H.tt, L, H, R)
+#     return unthunk(x, env)
+# 
+# 
+def bake_2(x, sc, env):
     if isinstance(x, Tree):
-        L, H, R = bake_(x.L, env), bake_(x.H, env), bake_(x.R, env)
-        if TT.THUNK not in (L.tt, H.tt, R.tt):
-            x = Tree(H.tt, L, H, R)
-            return Eval(x, env)
-        L, H, R = unthunk(L, env), unthunk(H, env), unthunk(R, env)
-        return Tree(H.tt, L, H, R)
-    return unthunk(x, env)
-
-
-def bake_2(x, env):
-    if isinstance(x, Tree):
-        L, H, R = bake_2(x.L, env), bake_2(x.H, env), bake_2(x.R, env)
+        L, H, R = bake_2(x.L, sc, env), bake_2(x.H, sc, env), bake_2(x.R, sc, env)
         x = Tree(H.tt, L, H, R)
         #if TT.THUNK not in (L.tt, H.tt, R.tt):
-        #    x = Eval(x, env)
+        #    x = Eval(x, sc, env)
     elif isinstance(x, Leaf) and x.tt == TT.THUNK:
         x = unwrap(x)
         #if x.tt != TT.THUNK:
-        #    x = Eval(x, env)
+        #    x = Eval(x, sc, env)
     return x
 
-def unthunk(x, env):
-    if x.tt == TT.THUNK:
-        return x.w
-    elif x.tt == TT.FUNCTION:
-        return x
-    return Eval(x, env)
+# def unthunk(x, env):
+#     if x.tt == TT.THUNK:
+#         return x.w
+#     elif x.tt == TT.FUNCTION:
+#         return x
+#     return Eval(x, sc,env)
 
 
-def then(a, b, env):
+def then(a, b, sc, env):
     assert b.tt == TT.PUNCTUATION and isinstance(b, Tree)
     conseq = b.R if a.w == 0 else b.L
     if conseq.tt in (TT.FUNCTION, TT.THUNK):
         conseq = conseq.w
     return conseq
 
-le = lambda a, b, env: Leaf(TT.NUM, 1 if a.w < b.w else 0),
-ge = lambda a, b, env: Leaf(TT.NUM, 1 if a.w > b.w else 0),
+le = lambda a, b, sc, env: Leaf(TT.NUM, 1 if a.w < b.w else 0),
+ge = lambda a, b, sc, env: Leaf(TT.NUM, 1 if a.w > b.w else 0),
 
-def app(a, b, env):
+def app(a, b, sc, env):
     if a.tt == "vec":
         return Leaf("vec", a.w + [b.w])
     return Leaf("vec", [a.w, b.w])
 
-def P(a, _, env):
+def P(a, _, sc, env):
     print(a)
     return a
 
-def wait(a, b, env):
+def wait(a, b, sc, env):
     assert b.tt == TT.NUM and b.w >= 0
     time.sleep(b.w)
     return a
 
 
 BUILTINS = {
-    "+": lambda a, b, env: Leaf(TT.NUM, a.w + b.w),
-    "-": lambda a, b, env: Leaf(TT.NUM, a.w - b.w),
-    "*": lambda a, b, env: Leaf(TT.NUM, a.w * b.w),
-    "/": lambda a, b, env: Leaf(TT.NUM, a.w // b.w),
-    "=": lambda a, b, env: Leaf(TT.NUM, 1 if a.w == b.w else 0),
+    "+": lambda a, b, sc, env: Leaf(TT.NUM, a.w + b.w),
+    "-": lambda a, b, sc, env: Leaf(TT.NUM, a.w - b.w),
+    "*": lambda a, b, sc, env: Leaf(TT.NUM, a.w * b.w),
+    "/": lambda a, b, sc, env: Leaf(TT.NUM, a.w // b.w),
+    "=": lambda a, b, sc, env: Leaf(TT.NUM, 1 if a.w == b.w else 0),
     "<": le,
     ">": ge,
     "le": le,
     "ge": ge,
-    "lte": lambda a, b, env: Leaf(TT.NUM, 1 if a.w <= b.w else 0),
-    "gte": lambda a, b, env: Leaf(TT.NUM, 1 if a.w >= b.w else 0),
-    "$": lambda a, b, env: env.lookup(a.w, b),
-    "to": lambda a, b, env: env.assign(b.w, a),
-    "as": lambda a, b, env: env.bind(b.w, a),
-    "is": lambda a, b, env: env.bind(a.w, b),
+    "lte": lambda a, b, sc, env: Leaf(TT.NUM, 1 if a.w <= b.w else 0),
+    "gte": lambda a, b, sc, env: Leaf(TT.NUM, 1 if a.w >= b.w else 0),
+    "$": lambda a, b, sc, env: env.lookup(a.w, b),
+    "to": lambda a, b, sc, env: env.assign(b.w, a),
+    "as": lambda a, b, sc, env: env.bind(b.w, a),
+    "is": lambda a, b, sc, env: env.bind(a.w, b),
     "?": then,
     "then": then,
     "t": get_type,
-    "|": lambda a, b, env: b,
+    "|": lambda a, b, sc, env: b,
     "bake": bake,
-    "L": lambda a, _, env: a.L,
-    "H": lambda a, _, env: a.H,
-    "R": lambda a, _, env: a.R,
-    "open": lambda a, _, env: unwrap(a),
-    "unwrap": lambda a, _, env: unwrap(a),
+    "L": lambda a, _, sc, env: a.L,
+    "H": lambda a, _, sc, env: a.H,
+    "R": lambda a, _, sc, env: a.R,
+    "open": lambda a, _, sc, env: unwrap(a),
+    "unwrap": lambda a, _, sc, env: unwrap(a),
     ",": app,
-    "vec": lambda a, _, env: Leaf("vec", []),
+    "vec": lambda a, _, sc, env: Leaf("vec", []),
     "callcc": callcc,
     "P": P,
     "wait": wait,
@@ -176,7 +176,7 @@ class Env:
         return value
 
 
-def Eval(x, env):
+def Eval(x, sc, env):
     while True:
         if isinstance(x, Leaf):
             return x
@@ -185,9 +185,9 @@ def Eval(x, env):
         L, H, R = x.L, x.H, x.R
 
         if isinstance(L, Tree):
-            L = Eval(L, env)
+            L = Eval(L, sc, env)
         if isinstance(H, Tree):
-            H = Eval(H, env)
+            H = Eval(H, sc, env)
         # x = Tree(H.tt, L, H, R) # TODO why this??
 
         if H.tt == TT.SEPARATOR:
@@ -196,7 +196,7 @@ def Eval(x, env):
             continue
 
         if isinstance(R, Tree):
-            R = Eval(R, env)
+            R = Eval(R, sc, env)
 
         # print("EVAL", x, file=sys.stderr)
         # print("L", L, file=sys.stderr)
@@ -219,7 +219,7 @@ def Eval(x, env):
             assert op.tt in (TT.BUILTIN, TT.THUNK, TT.FUNCTION)
             x = Tree(op.tt, L, op, R)
         elif H.tt == TT.BUILTIN:
-            x = H.w(L, R, env)
+            x = H.w(L, R, sc, env)
         elif H.tt == TT.VOID:
             return H
         else:
@@ -238,7 +238,7 @@ def Repl(prompt="> "):
             #print("LEX", y)
             y = Parse(y)
             # print("PARSE", y)
-            y = Eval(y, env)
+            y = Eval(y, Void, env)
             if y is not None:
                 print(y)
         except ParseError as err:
