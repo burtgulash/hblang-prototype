@@ -11,17 +11,28 @@ from c import Lex, Parse, \
 
 
 class CT(Enum):
-    Return = 1
+    Leaf = 0
+    Tree = 1
     Left = 2
     Head = 3
     Right = 4
-    Delim = 5
+    Return = 5
+    Delim = 6
+    Function = 7
+
+    def __lt__(self, other):
+        return self.value < other.value
+
+    def __eq__(self, other):
+        return self.value == other.value
+
+    def __le__(self, other):
+        return self.value <= other.value
 
 
 class Frame:
 
-    def __init__(self, ct, ins, L, H, R, x, env):
-        self.ins = ins
+    def __init__(self, ct, L, H, R, x, env):
         self.L = L
         self.H = H
         self.R = R
@@ -34,7 +45,7 @@ class Frame:
 
 
 def reset(a, b, cstack, env):
-    cstack.append(Frame(CT.Delim, 0, None, None, None, None, env))
+    cstack.append(Frame(CT.Delim, None, None, None, None, env))
     if b.tt == TT.THUNK:
         b = b.w
     return b, cstack, env
@@ -210,40 +221,39 @@ class Env:
         return repr(self.e)
 
 
+def next_ins(x):
+    if isinstance(x, Leaf):
+        return CT.Leaf
+    elif isinstance(x, Tree):
+        return CT.Tree
+    assert False
+
+
 def Eval(x, env):
     # Stack of continuations
-    cstack = [Frame(CT.Return, 0, None, None, None, x, env)]
+    cstack = [Frame(CT.Return, None, None, None, x, env)]
     # Stored instruction pointer
-    ins = 0
+    ins = next_ins(x)
 
     while True:
-        if isinstance(x, Leaf):
-            pass
-        elif isinstance(x, Tree):
-            # print("x", x)
-            # print("env", env)
-            # print("ins", ins)
-            L, H, R = x.L, x.H, x.R
-
-            # Eval arguments L, H, R
-            if ins < 1 and isinstance(L, Tree):
-                cstack.append(Frame(CT.Left, 1, None, None, None, x, env))
-                x, ins = L, 0
+        if ins >= CT.Tree:
+            if ins == CT.Tree:
+                L, H, R = x.L, x.H, x.R
+            if ins < CT.Left and isinstance(L, Tree):
+                cstack.append(Frame(CT.Left, L, H, R, x, env))
+                x, ins = L, next_ins(L)
                 continue
-            if ins < 2 and isinstance(H, Tree):
-                cstack.append(Frame(CT.Head, 2, L, None, None, x, env))
-                x, ins = H, 0
+            if ins < CT.Head and isinstance(H, Tree):
+                cstack.append(Frame(CT.Head, L, H, R, x, env))
+                x, ins = H, next_ins(H)
                 continue
-            # x = Tree(H.tt, L, H, R) # TODO why this??
-
             if H.tt == TT.SEPARATOR:
                 # Tail recurse on separator '|' before R gets evaluated
-                x, ins = R, 0
+                x, ins = R, next_ins(R)
                 continue
-
-            if ins < 3 and isinstance(R, Tree):
-                cstack.append(Frame(CT.Right, 3, L, H, None, x, env))
-                x, ins = R, 0
+            if ins < CT.Right and isinstance(R, Tree):
+                cstack.append(Frame(CT.Right, L, H, R, x, env))
+                x, ins = R, next_ins(R)
                 continue
 
             # print("EVAL", x, file=sys.stderr)
@@ -251,22 +261,14 @@ def Eval(x, env):
             # print("R", R, file=sys.stderr)
 
             # TODO reorder by frequency of invocation. BUILTIN to top?
-            if H.tt == TT.THUNK:
-                x, ins = unwrap(H), 0
-                continue
-            elif H.tt == TT.FUNCTION:
-                env = setenv(H, env)
-                env.bind("self", H)
-                env.bind("x", L)
-                env.bind("y", R)
-                x, ins = unwrap(H), 0
-                continue
+            if H.tt == TT.VOID:
+                x = H
             elif H.tt == TT.CONTINUATION:
                 st, env = H.w
                 # TODO add another delim?? MinCaml does
-                # cstack.append(Frame(CT.Delim, ins, None, None, None, L, env))
+                # cstack.append(Frame(CT.Delim, None, None, None, L, env))
                 cstack.extend(st)
-                x, ins = L, 0
+                x, ins = L, next_ins(L)
             elif H.tt == TT.PUNCTUATION and H.w in ".:":
                 x = Tree(H.tt, L, H, R)
             elif H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
@@ -275,17 +277,30 @@ def Eval(x, env):
                     raise Exception(f"Operator not found {H.w}")
                 assert op.tt in (TT.CONTINUATION, TT.SPECIAL,\
                                  TT.BUILTIN, TT.THUNK, TT.FUNCTION)
-                x, ins = Tree(op.tt, L, op, R), 0
+                x = Tree(op.tt, L, op, R)
+                ins = next_ins(x)
                 continue
             elif H.tt == TT.BUILTIN:
-                x, ins = H.w(L, R, env), 0
+                x = H.w(L, R, env)
+                ins = next_ins(x)
                 continue
             elif H.tt == TT.SPECIAL:
                 x, cstack, env = H.w(L, R, cstack, env)
-                ins = 0
+                ins = next_ins(x)
                 continue
-            elif H.tt == TT.VOID:
-                x = H
+            elif H.tt == TT.THUNK:
+                x = unwrap(H)
+                ins = next_ins(x)
+                continue
+            elif H.tt == TT.FUNCTION:
+                cstack.append(Frame(CT.Function, L, H, R, x, env))
+                env = Env(env)
+                env.bind("x", L)
+                env.bind("self", H)
+                env.bind("y", R)
+                x = unwrap(H)
+                ins = next_ins(x)
+                continue
             else:
                 raise AssertionError(f"Can't process: {H} of {H.tt}")
 
@@ -293,21 +308,25 @@ def Eval(x, env):
         if cstack[-1].ct == CT.Delim:
             continue
 
-        # Apply continuation
+        # Restore stack frame and apply continuation
         c = cstack.pop()
-        if c.ct == CT.Return:
+        ins = c.ct
+        if ins == CT.Return:
             return x
 
-        L, H, R = c.L, c.H, c.R
-        env, ins = c.env, c.ins
-        if c.ct == CT.Left:
-            x = Tree(c.x.tt, x, c.x.H, c.x.R)
+        L, H, R, env = c.L, c.H, c.R, c.env
+        # print("Restore", L, H, R, c.ct.name, id(env), env)
+        if c.ct == CT.Function:
+            ins = next_ins(x)
+        elif c.ct == CT.Left:
+            L = x
         elif c.ct == CT.Head:
-            x = Tree(x.tt, L, x, c.x.R)
+            H = x
         elif c.ct == CT.Right:
-            x = Tree(H.tt, L, H, x)
+            R = x
         else:
             assert False
+        # print("R", L, H, R)
 
 
 def Repl(prompt="> "):
