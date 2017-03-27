@@ -32,12 +32,11 @@ class CT(Enum):
 
 class Frame:
 
-    def __init__(self, ct, L, H, R, x, env):
+    def __init__(self, ct, L, H, R, env):
+        self.ct = ct
         self.L = L
         self.H = H
         self.R = R
-        self.ct = ct
-        self.x = x
         self.env = env
 
     def __repr__(s):
@@ -45,7 +44,7 @@ class Frame:
 
 
 def reset(a, b, cstack, env):
-    cstack.append(Frame(CT.Delim, None, None, None, None, env))
+    cstack.append(Frame(CT.Delim, None, None, None, env))
     if b.tt == TT.THUNK:
         b = b.w
     return b, cstack, env
@@ -231,7 +230,7 @@ def next_ins(x):
 
 def Eval(x, env):
     # Stack of continuations
-    cstack = [Frame(CT.Return, None, None, None, x, env)]
+    cstack = [Frame(CT.Return, None, None, None, env)]
     # Stored instruction pointer
     ins = next_ins(x)
 
@@ -240,11 +239,11 @@ def Eval(x, env):
             if ins == CT.Tree:
                 L, H, R = x.L, x.H, x.R
             if ins < CT.Left and isinstance(L, Tree):
-                cstack.append(Frame(CT.Left, L, H, R, x, env))
+                cstack.append(Frame(CT.Left, L, H, R, env))
                 x, ins = L, next_ins(L)
                 continue
             if ins < CT.Head and isinstance(H, Tree):
-                cstack.append(Frame(CT.Head, L, H, R, x, env))
+                cstack.append(Frame(CT.Head, L, H, R, env))
                 x, ins = H, next_ins(H)
                 continue
             if H.tt == TT.SEPARATOR:
@@ -252,7 +251,7 @@ def Eval(x, env):
                 x, ins = R, next_ins(R)
                 continue
             if ins < CT.Right and isinstance(R, Tree):
-                cstack.append(Frame(CT.Right, L, H, R, x, env))
+                cstack.append(Frame(CT.Right, L, H, R, env))
                 x, ins = R, next_ins(R)
                 continue
 
@@ -297,7 +296,7 @@ def Eval(x, env):
                 # be effectively the same as the new one
                 self_h = env.lookup("self", None)
                 if cstack[-1].ct != CT.Function or self_h is not H:
-                    cstack.append(Frame(CT.Function, L, H, R, x, env))
+                    cstack.append(Frame(CT.Function, L, H, R, env))
                     env = Env(env)
                 # print("ENV", id(env))
 
@@ -332,7 +331,6 @@ def Eval(x, env):
             R = x
         else:
             assert False
-        # print("R", L, H, R)
 
 
 def Repl(prompt="> "):
