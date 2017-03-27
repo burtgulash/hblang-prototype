@@ -293,8 +293,14 @@ def Eval(x, env):
                 ins = next_ins(x)
                 continue
             elif H.tt == TT.FUNCTION:
-                cstack.append(Frame(CT.Function, L, H, R, x, env))
-                env = Env(env)
+                # Tail optimize cstack and env if the last frame would
+                # be effectively the same as the new one
+                self_h = env.lookup("self", None)
+                if cstack[-1].ct != CT.Function or self_h is not H:
+                    cstack.append(Frame(CT.Function, L, H, R, x, env))
+                    env = Env(env)
+                # print("ENV", id(env))
+
                 env.bind("x", L)
                 env.bind("self", H)
                 env.bind("y", R)
