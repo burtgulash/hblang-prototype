@@ -20,7 +20,8 @@ class CT(Enum):
 
 class Frame:
 
-    def __init__(self, ct, L, H, R, x, env):
+    def __init__(self, ct, ins, L, H, R, x, env):
+        self.ins = ins
         self.L = L
         self.H = H
         self.R = R
@@ -28,24 +29,32 @@ class Frame:
         self.x = x
         self.env = env
 
+    def __repr__(s):
+        return f"F {s.ct} ({s.L} {s.H} {s.R})"
+
 
 def reset(a, b, cstack, env):
-    cstack.append(Frame(CT.Delim, None, None, None, None, env))
-    return a, cstack, env
+    cstack.append(Frame(CT.Delim, 0, None, None, None, None, env))
+    if b.tt == TT.THUNK:
+        b = b.w
+    return b, cstack, env
 
 
 def shift(a, b, cstack, env):
     st = []
     while True:
         c = cstack.pop()
-        if c.tt == Delim:
+        if c.ct == CT.Delim:
             break
         st.append(c)
 
+    st = st[::-1]
+    # So far continuation is just a pair of st and env
     continuation = Leaf(TT.CONTINUATION, (st, env))
     env.bind(a.w, continuation)
-    assert b.tt == TT.THUNK
-    return b.w, cstack, env
+    if b.tt == TT.THUNK:
+        b = b.w
+    return b, cstack, env
 
 
 def setenv(H, env):
@@ -78,8 +87,8 @@ def bake(a, _, env):
 #         L, H, R = unthunk(L, env), unthunk(H, env), unthunk(R, env)
 #         return Tree(H.tt, L, H, R)
 #     return unthunk(x, env)
-# 
-# 
+#
+#
 def bake_2(x, env):
     if isinstance(x, Tree):
         L, H, R = bake_2(x.L, env), bake_2(x.H, env), bake_2(x.R, env)
@@ -195,34 +204,44 @@ class Env:
         env.bind(name, value)
         return value
 
+    def __repr__(self):
+        return repr(self.e)
+
 
 def Eval(x, env):
-    cstack = [Frame(CT.Return, None, None, None, x, env)]
+    # Stack of continuations
+    cstack = [Frame(CT.Return, 0, None, None, None, x, env)]
+    # Stored instruction pointer
+    ins = 0
 
     while True:
         if isinstance(x, Leaf):
             pass
         elif isinstance(x, Tree):
+            # print("x", x)
+            # print("env", env)
+            # print("ins", ins)
             L, H, R = x.L, x.H, x.R
 
-            if isinstance(L, Tree):
-                cstack.append(Frame(CT.Left, None, None, None, x, env))
-                x = L
+            # Eval arguments L, H, R
+            if ins < 1 and isinstance(L, Tree):
+                cstack.append(Frame(CT.Left, 1, None, None, None, x, env))
+                x, ins = L, 0
                 continue
-            if isinstance(H, Tree):
-                cstack.append(Frame(CT.Head, L, None, None, x, env))
-                x = H
+            if ins < 2 and isinstance(H, Tree):
+                cstack.append(Frame(CT.Head, 2, L, None, None, x, env))
+                x, ins = H, 0
                 continue
             # x = Tree(H.tt, L, H, R) # TODO why this??
 
             if H.tt == TT.SEPARATOR:
                 # Tail recurse on separator '|' before R gets evaluated
-                x = R
+                x, ins = R, 0
                 continue
 
-            if isinstance(R, Tree):
-                cstack.append(Frame(CT.Right, L, H, None, x, env))
-                x = R
+            if ins < 3 and isinstance(R, Tree):
+                cstack.append(Frame(CT.Right, 3, L, H, None, x, env))
+                x, ins = R, 0
                 continue
 
             # print("EVAL", x, file=sys.stderr)
@@ -231,39 +250,46 @@ def Eval(x, env):
 
             # TODO reorder by frequency of invocation. BUILTIN to top?
             if H.tt == TT.THUNK:
-                x = unwrap(H)
+                x, ins = unwrap(H), 0
                 continue
             elif H.tt == TT.FUNCTION:
                 env = setenv(H, env)
                 env.bind("self", H)
                 env.bind("x", L)
                 env.bind("y", R)
-                x = unwrap(H)
+                x, ins = unwrap(H), 0
                 continue
             elif H.tt == TT.CONTINUATION:
-                st, env = x.w
-                x = L
-                cstack.append(Frame(CT.Delim, None, None, None, x, env))
-                while st:
-                    cstack.append(st.pop())
+                st, env = H.w
+                # TODO add another delim?? MinCaml does
+                # cstack.append(Frame(CT.Delim, ins, None, None, None, L, env))
+                cstack.extend(st)
+                x, ins = L, 0
             elif H.tt == TT.PUNCTUATION and H.w in ".:":
                 x = Tree(H.tt, L, H, R)
             elif H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
                 op = env.lookup(H.w, None)
                 if op is None:
                     raise Exception(f"Operator not found {H.w}")
-                assert op.tt in (TT.BUILTIN, TT.THUNK, TT.FUNCTION)
-                x = Tree(op.tt, L, op, R)
+                assert op.tt in (TT.CONTINUATION, TT.SPECIAL,\
+                                 TT.BUILTIN, TT.THUNK, TT.FUNCTION)
+                x, ins = Tree(op.tt, L, op, R), 0
                 continue
             elif H.tt == TT.BUILTIN:
-                x = H.w(L, R, env)
+                x, ins = H.w(L, R, env), 0
                 continue
             elif H.tt == TT.SPECIAL:
                 x, cstack, env = H.w(L, R, cstack, env)
+                ins = 0
+                continue
             elif H.tt == TT.VOID:
                 x = H
             else:
                 raise AssertionError(f"Can't process: {H} of {H.tt}")
+
+        # Skip delims
+        if cstack[-1].ct == CT.Delim:
+            continue
 
         # Apply continuation
         c = cstack.pop()
@@ -271,17 +297,13 @@ def Eval(x, env):
             return x
 
         L, H, R = c.L, c.H, c.R
+        env, ins = c.env, c.ins
         if c.ct == CT.Left:
             x = Tree(c.x.tt, x, c.x.H, c.x.R)
-            env = c.env
         elif c.ct == CT.Head:
-            x = Tree(H.tt, L, x, c.x.R)
-            env = c.env
+            x = Tree(x.tt, L, x, c.x.R)
         elif c.ct == CT.Right:
             x = Tree(H.tt, L, H, x)
-            env = c.env
-        elif c.ct == CT.Delim:
-            env = c.env
         else:
             assert False
 
@@ -293,6 +315,7 @@ def Repl(prompt="> "):
         **special,
         **builtins,
     })
+    env = Env(env) # dummy env
 
     while True:
         try:
