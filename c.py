@@ -98,6 +98,8 @@ class TT(Enum):
     END = 14
     CLOSURE = 15
     NEWLINE = 16
+    CONTINUATION = 17
+    SPECIAL = 18
 
 
 Void = Leaf(TT.VOID, "void")
