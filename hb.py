@@ -49,6 +49,8 @@ def shift(a, b, cstack, env):
         st.append(c)
 
     st = st[::-1]
+    # Don't let the continuation binding propagate to parent environment
+    env = Env(env)
     # So far continuation is just a pair of st and env
     continuation = Leaf(TT.CONTINUATION, (st, env))
     env.bind(a.w, continuation)
