@@ -121,6 +121,10 @@ def bake_2(x, env):
 #     return Eval(x, nv)
 
 
+def invoke(a, b, env):
+    return Tree(b.tt, a, b, Void)
+
+
 def then(a, b, env):
     assert b.tt == TT.PUNCTUATION and isinstance(b, Tree)
     conseq = b.R if a.w == 0 else b.L
@@ -128,8 +132,8 @@ def then(a, b, env):
         conseq = conseq.w
     return conseq
 
-le = lambda a, b, env: Leaf(TT.NUM, 1 if a.w < b.w else 0),
-ge = lambda a, b, env: Leaf(TT.NUM, 1 if a.w > b.w else 0),
+le = lambda a, b, env: Leaf(TT.NUM, 1 if a.w < b.w else 0)
+ge = lambda a, b, env: Leaf(TT.NUM, 1 if a.w > b.w else 0)
 
 def app(a, b, env):
     if a.tt == "vec":
@@ -156,9 +160,9 @@ BUILTINS = {
     ">": ge,
     "le": le,
     "ge": ge,
-    "lte": lambda a, b, env: Leaf(TT.NUM, 1 if a.w <= b.w else 0),
-    "gte": lambda a, b, env: Leaf(TT.NUM, 1 if a.w >= b.w else 0),
-    "$": lambda a, b, env: env.lookup(a.w, b),
+    "lt": lambda a, b, env: Leaf(TT.NUM, 1 if a.w <= b.w else 0),
+    "gt": lambda a, b, env: Leaf(TT.NUM, 1 if a.w >= b.w else 0),
+    "$": lambda a, b, env: env.lookup(b.w, a),
     "to": lambda a, b, env: env.assign(b.w, a),
     "as": lambda a, b, env: env.bind(b.w, a),
     "is": lambda a, b, env: env.bind(a.w, b),
@@ -177,6 +181,7 @@ BUILTINS = {
     # "callcc": callcc,
     "P": P,
     "wait": wait,
+    "!": invoke,
 }
 
 
@@ -268,7 +273,7 @@ def Eval(x, env):
                 # cstack.append(Frame(CT.Delim, None, None, None, L, env))
                 cstack.extend(st)
                 x, ins = L, next_ins(L)
-            elif H.tt == TT.PUNCTUATION and H.w in ".:":
+            elif H.tt == TT.PUNCTUATION and H.w in ".:`":
                 x = Tree(H.tt, L, H, R)
             elif H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
                 op = env.lookup(H.w, None)

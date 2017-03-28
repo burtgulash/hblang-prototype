@@ -5,7 +5,7 @@ import re
 
 
 def right_associative(x):
-    return x and x in ":$"
+    return x and x in "$:"
 
 
 def parens_match(left, right):
