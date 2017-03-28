@@ -125,15 +125,17 @@ def invoke(a, b, env):
     return Tree(b.tt, a, b, Void)
 
 
-def then(a, b, env):
-    assert b.tt == TT.PUNCTUATION and isinstance(b, Tree)
-    conseq = b.R if a.w == 0 else b.L
+def if_(a, b, env):
+    assert a.tt == TT.PUNCTUATION and isinstance(a, Tree)
+    conseq = a.R if b.w == 0 else a.L
     if conseq.tt in (TT.FUNCTION, TT.THUNK):
         conseq = conseq.w
     return conseq
 
+
 le = lambda a, b, env: Leaf(TT.NUM, 1 if a.w < b.w else 0)
 ge = lambda a, b, env: Leaf(TT.NUM, 1 if a.w > b.w else 0)
+
 
 def app(a, b, env):
     if a.tt == "vec":
@@ -166,8 +168,10 @@ BUILTINS = {
     "to": lambda a, b, env: env.assign(b.w, a),
     "as": lambda a, b, env: env.bind(b.w, a),
     "is": lambda a, b, env: env.bind(a.w, b),
-    "?": then,
-    "then": then,
+    "if": if_,
+    "then": lambda a, b, env: if_(b, a, env),
+    "not": lambda a, b, env: Leaf(TT.NUM, 1 - a.w),
+    "?": lambda a, b, env: if_(b, a, env),
     "t": get_type,
     "|": lambda a, b, env: b,
     "bake": bake,
