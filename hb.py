@@ -158,6 +158,7 @@ BUILTINS = {
     "*": lambda a, b, env: Leaf(TT.NUM, a.w * b.w),
     "/": lambda a, b, env: Leaf(TT.NUM, a.w // b.w),
     "=": lambda a, b, env: Leaf(TT.NUM, 1 if a.w == b.w else 0),
+    "tt_eq": lambda a, b, env: Leaf(TT.NUM, 1 if a.tt == b.tt else 0),
     "<": le,
     ">": ge,
     "le": le,
