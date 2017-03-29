@@ -9,6 +9,13 @@ from c import Lex, Parse, \
               ParseError, TT, Tree, Leaf, Void
 
 
+class NoDispatch(Exception):
+    pass
+
+
+class CantReduce(Exception):
+    pass
+
 
 class CT(Enum):
     Leaf = 0
@@ -151,6 +158,10 @@ def wait(a, b, env):
     time.sleep(b.w)
     return a
 
+def set_dispatch(a, b, env):
+    dispatch_str = f"{b.L.tt}:{b.R.w}"
+    env.bind(dispatch_str, a)
+    return a
 
 BUILTINS = {
     "+": lambda a, b, env: Leaf(TT.NUM, a.w + b.w),
@@ -158,7 +169,8 @@ BUILTINS = {
     "*": lambda a, b, env: Leaf(TT.NUM, a.w * b.w),
     "/": lambda a, b, env: Leaf(TT.NUM, a.w // b.w),
     "=": lambda a, b, env: Leaf(TT.NUM, 1 if a.w == b.w else 0),
-    "tt_eq": lambda a, b, env: Leaf(TT.NUM, 1 if a.tt == b.tt else 0),
+    "sametype": lambda a, b, env: Leaf(TT.NUM, 1 if a.tt == b.tt else 0),
+    "dispatch": set_dispatch,
     "<": le,
     ">": ge,
     "le": le,
@@ -282,9 +294,12 @@ def Eval(x, env):
             elif H.tt == TT.PUNCTUATION and H.w in ".:`":
                 x = Tree(H.tt, L, H, R)
             elif H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
-                op = env.lookup(H.w, None)
+                dispatch_str = f"{L.tt}:{H.w}"
+                op = env.lookup(dispatch_str, None)
                 if op is None:
-                    raise Exception(f"Operator not found {H.w}")
+                    op = env.lookup(H.w, None)
+                if op is None:
+                    raise NoDispatch(f"Can't dispatch {H.w} on L: {L.tt}")
                 assert op.tt in (TT.CONTINUATION, TT.SPECIAL,\
                                  TT.BUILTIN, TT.THUNK, TT.FUNCTION)
                 x = Tree(op.tt, L, op, R)
@@ -318,7 +333,7 @@ def Eval(x, env):
                 ins = next_ins(x)
                 continue
             else:
-                raise AssertionError(f"Can't process: {H} of {H.tt}")
+                raise CantReduce(f"Can't reduce node: {H} of {H.tt}")
 
         # Skip delims
         while True:
@@ -367,6 +382,8 @@ def Repl(prompt="> "):
                 print(x)
         except ParseError as err:
             print(f"Parse error: {err}", file=sys.stderr)
+        except (NoDispatch, CantReduce, TypeError) as err:
+            print(err, file=sys.stderr)
         except (EOFError, KeyboardInterrupt):
             break
 
