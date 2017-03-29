@@ -55,10 +55,10 @@ def shift(a, b, cstack, env):
     while True:
         c = cstack.pop()
         if c.ct == CT.Delim:
+            cstack.append(c) # push delim back
             break
         st.append(c)
 
-    st = st[::-1]
     # Don't let the continuation binding propagate to parent environment
     env = Env(env)
     # So far continuation is just a pair of st and env
@@ -274,8 +274,9 @@ def Eval(x, env):
             elif H.tt == TT.CONTINUATION:
                 st, env = H.w
                 # TODO add another delim?? MinCaml does
-                # cstack.append(Frame(CT.Delim, None, None, None, L, env))
-                cstack.extend(st)
+                cstack.append(Frame(CT.Delim, L, H, R, env))
+                while st:
+                    cstack.append(st.pop())
                 x, ins = L, next_ins(L)
             elif H.tt == TT.PUNCTUATION and H.w in ".:`":
                 x = Tree(H.tt, L, H, R)
@@ -319,11 +320,13 @@ def Eval(x, env):
                 raise AssertionError(f"Can't process: {H} of {H.tt}")
 
         # Skip delims
-        if cstack[-1].ct == CT.Delim:
-            continue
+        while True:
+            c = cstack.pop()
+            if c.ct != CT.Delim:
+                break
 
         # Restore stack frame and apply continuation
-        c = cstack.pop()
+        # c = cstack.pop()
         ins = c.ct
         if ins == CT.Return:
             return x
