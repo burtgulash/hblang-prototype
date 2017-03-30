@@ -168,8 +168,8 @@ BUILTINS = {
 
 
 SPECIAL = {
-    "reset": reset,
-    "shift": shift,
+    "cpush": reset,
+    "cpop": shift,
 }
 
 
