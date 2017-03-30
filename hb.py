@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
-from enum import Enum
 import sys
 import time
 
 import readline
 from c import Lex, Parse, \
               ParseError, TT, Tree, Leaf, Void
+
+from stack import Cactus, CT, Frame
 
 
 class NoDispatch(Exception):
@@ -17,59 +18,19 @@ class CantReduce(Exception):
     pass
 
 
-class CT(Enum):
-    Leaf = 0
-    Tree = 1
-    Left = 2
-    Head = 3
-    Right = 4
-    Return = 5
-    Delim = 6
-    Function = 7
-
-    def __lt__(self, other):
-        return self.value < other.value
-
-    def __eq__(self, other):
-        return self.value == other.value
-
-    def __le__(self, other):
-        return self.value <= other.value
-
-
-class Frame:
-
-    def __init__(self, ct, L, H, R, env):
-        self.ct = ct
-        self.L = L
-        self.H = H
-        self.R = R
-        self.env = env
-
-    def __repr__(s):
-        return f"F {s.ct} ({s.L} {s.H} {s.R})"
-
-
 def reset(a, b, cstack, env):
-    cstack.append(Frame(CT.Delim, None, None, None, env))
+    cstack.spush()
     if b.tt == TT.THUNK:
         b = b.w
     return b, cstack, env
 
 
 def shift(a, b, cstack, env):
-    st = []
-    while True:
-        c = cstack.pop()
-        if c.ct == CT.Delim:
-            cstack.append(c) # push delim back
-            break
-        st.append(c)
-
+    cc = cstack.spop()
     # Don't let the continuation binding propagate to parent environment
     env = Env(env)
     # So far continuation is just a pair of st and env
-    continuation = Leaf(TT.CONTINUATION, (st, env))
+    continuation = Leaf(TT.CONTINUATION, (cc, env))
     env.bind(a.w, continuation)
     if b.tt == TT.THUNK:
         b = b.w
@@ -112,12 +73,12 @@ def bake_2(x, env):
     if isinstance(x, Tree):
         L, H, R = bake_2(x.L, env), bake_2(x.H, env), bake_2(x.R, env)
         x = Tree(H.tt, L, H, R)
-        #if TT.THUNK not in (L.tt, H.tt, R.tt):
-        #    x = Eval(x, env)
+        # if TT.THUNK not in (L.tt, H.tt, R.tt):
+        #     x = Eval(x, env)
     elif isinstance(x, Leaf) and x.tt == TT.THUNK:
         x = unwrap(x)
-        #if x.tt != TT.THUNK:
-        #    x = Eval(x, env)
+        # if x.tt != TT.THUNK:
+        #     x = Eval(x, env)
     return x
 
 # def unthunk(x, env):
@@ -149,19 +110,23 @@ def app(a, b, env):
         return Leaf("vec", a.w + [b.w])
     return Leaf("vec", [a.w, b.w])
 
-def P(a, _, env):
+
+def print_fn(a, _, env):
     print(a)
     return a
+
 
 def wait(a, b, env):
     assert b.tt == TT.NUM and b.w >= 0
     time.sleep(b.w)
     return a
 
+
 def set_dispatch(a, b, env):
     dispatch_str = f"{b.L.tt}:{b.R.w}"
     env.bind(dispatch_str, a)
     return a
+
 
 BUILTINS = {
     "+": lambda a, b, env: Leaf(TT.NUM, a.w + b.w),
@@ -196,7 +161,7 @@ BUILTINS = {
     ",": app,
     "vec": lambda a, _, env: Leaf("vec", []),
     # "callcc": callcc,
-    "P": P,
+    "print": print_fn,
     "wait": wait,
     "!": invoke,
 }
@@ -206,7 +171,6 @@ SPECIAL = {
     "reset": reset,
     "shift": shift,
 }
-
 
 
 class Env:
@@ -252,20 +216,22 @@ def next_ins(x):
 
 def Eval(x, env):
     # Stack of continuations
-    cstack = [Frame(CT.Return, None, None, None, env)]
+    cstack = Cactus()
+    cstack.push(Frame(CT.Return, None, None, None, env))
     # Stored instruction pointer
     ins = next_ins(x)
+
 
     while True:
         if ins >= CT.Tree:
             if ins == CT.Tree:
                 L, H, R = x.L, x.H, x.R
             if ins < CT.Left and isinstance(L, Tree):
-                cstack.append(Frame(CT.Left, L, H, R, env))
+                cstack.push(Frame(CT.Left, L, H, R, env))
                 x, ins = L, next_ins(L)
                 continue
             if ins < CT.Head and isinstance(H, Tree):
-                cstack.append(Frame(CT.Head, L, H, R, env))
+                cstack.push(Frame(CT.Head, L, H, R, env))
                 x, ins = H, next_ins(H)
                 continue
             if H.tt == TT.SEPARATOR:
@@ -273,7 +239,7 @@ def Eval(x, env):
                 x, ins = R, next_ins(R)
                 continue
             if ins < CT.Right and isinstance(R, Tree):
-                cstack.append(Frame(CT.Right, L, H, R, env))
+                cstack.push(Frame(CT.Right, L, H, R, env))
                 x, ins = R, next_ins(R)
                 continue
 
@@ -285,11 +251,10 @@ def Eval(x, env):
             if H.tt == TT.VOID:
                 x = H
             elif H.tt == TT.CONTINUATION:
-                st, env = H.w
+                cc, env = H.w
                 # TODO add another delim?? MinCaml does
-                cstack.append(Frame(CT.Delim, L, H, R, env))
-                while st:
-                    cstack.append(st.pop())
+                cstack.push(Frame(CT.Delim, L, H, R, env))
+                cstack.scopy(cc)
                 x, ins = L, next_ins(L)
             elif H.tt == TT.PUNCTUATION and H.w in ".:`":
                 x = Tree(H.tt, L, H, R)
@@ -300,7 +265,7 @@ def Eval(x, env):
                     op = env.lookup(H.w, None)
                 if op is None:
                     raise NoDispatch(f"Can't dispatch {H.w} on L: {L.tt}")
-                assert op.tt in (TT.CONTINUATION, TT.SPECIAL,\
+                assert op.tt in (TT.CONTINUATION, TT.SPECIAL,
                                  TT.BUILTIN, TT.THUNK, TT.FUNCTION)
                 x = Tree(op.tt, L, op, R)
                 ins = next_ins(x)
@@ -321,8 +286,10 @@ def Eval(x, env):
                 # Tail optimize cstack and env if the last frame would
                 # be effectively the same as the new one
                 self_h = env.lookup("self", None)
-                if cstack[-1].ct != CT.Function or self_h is not H:
-                    cstack.append(Frame(CT.Function, L, H, R, env))
+                last_frame = cstack.peek()
+                if (last_frame and last_frame.ct != CT.Function) \
+                    or self_h is not H:
+                    cstack.push(Frame(CT.Function, L, H, R, env))
                     env = Env(env)
                 # print("ENV", id(env))
 
@@ -335,14 +302,8 @@ def Eval(x, env):
             else:
                 raise CantReduce(f"Can't reduce node: {H} of {H.tt}")
 
-        # Skip delims
-        while True:
-            c = cstack.pop()
-            if c.ct != CT.Delim:
-                break
-
         # Restore stack frame and apply continuation
-        # c = cstack.pop()
+        c = cstack.pop()
         ins = c.ct
         if ins == CT.Return:
             return x
@@ -368,13 +329,13 @@ def Repl(prompt="> "):
         **special,
         **builtins,
     })
-    env = Env(env) # dummy env
+    env = Env(env)  # dummy env
 
     while True:
         try:
             x = input(prompt)
             x = Lex(x)
-            #print("LEX", y)
+            # print("LEX", y)
             x = Parse(x)
             # print("PARSE", y)
             x = Eval(x, env)
