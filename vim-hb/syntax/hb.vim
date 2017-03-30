@@ -12,6 +12,7 @@ syn keyword hbContinuation cpush cpop
 syn keyword hbFunctionKeyword contained x y self
 
 syn match hbNumber "[_0-9]*"
+syn match hbSymbol "[a-zA-Z][a-zA-Z0-9_]*"
 syn match hbPunctuation "[!$%&*+,-./:;<=>?@\\^`~]"
 
 syn match hbParenthesis "[(){}|]"
@@ -30,6 +31,7 @@ hi def link hbTodo              Todo
 hi def link hbComment           Comment
 hi def link hbString            String
 hi def link hbNumber            Number
+hi def link hbNumber            Statement
 hi def link hbKeyword           Keyword
 hi def link hbParenthesis       Delimiter
 hi def link hbDelay             Type
