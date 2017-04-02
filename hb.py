@@ -10,6 +10,8 @@ from c import Lex, Parse, \
 from stack import Cactus, CT, Frame
 
 
+DISPATCH_SEP = ":"
+
 class NoDispatch(Exception):
     pass
 
@@ -126,10 +128,10 @@ def set_dispatch(a, b, env):
     fn_name = b.L.w
     if isinstance(b.R, Tree):
         left_tt, right_tt = b.R.L.w, b.R.R.w
-        dispatch_str = f"{fn_name}:{left_tt}:{right_tt}"
+        dispatch_str = f"{fn_name}{DISPATCH_SEP}{left_tt}{DISPATCH_SEP}{right_tt}"
     else:
         left_tt = b.R.w
-        dispatch_str = f"{fn_name}:{left_tt}"
+        dispatch_str = f"{fn_name}{DISPATCH_SEP}{left_tt}"
 
     env.bind(dispatch_str, a)
     return a
@@ -333,19 +335,55 @@ def Eval(x, env):
             assert False
 
 
+def fold(a, b, env):
+    if isinstance(b, Tree):
+        zero = b.R.w
+        op = b.L.w
+    else:
+        op = b.w
+        zero = {
+            "+": 0,
+            "-": 0,
+            "*": 1,
+            "/": 1,
+        }[op]
+
+    op = {
+        "+": lambda a, b: a + b,
+        "-": lambda a, b: a - b,
+        "*": lambda a, b: a * b,
+        "/": lambda a, b: a // b,
+    }[op]
+
+    acc = zero
+    for x in a.w:
+        acc = op(acc, x)
+    return Leaf(TT.NUM, acc)
+
+
+dispatch = {
+    ("+", "vec"): lambda a, b, env: Leaf("vec", [x + y for x, y in zip(a.w, b.w)]),
+    ("-", "vec"): lambda a, b, env: Leaf("vec", [x - y for x, y in zip(a.w, b.w)]),
+    ("*", "vec"): lambda a, b, env: Leaf("vec", [x * y for x, y in zip(a.w, b.w)]),
+    ("/", "vec"): lambda a, b, env: Leaf("vec", [x // y for x, y in zip(a.w, b.w)]),
+    ("+", "vec", TT.NUM): lambda a, b, env: Leaf("vec", [x + b.w for x in a.w]),
+    ("-", "vec", TT.NUM): lambda a, b, env: Leaf("vec", [x - b.w for x in a.w]),
+    ("*", "vec", TT.NUM): lambda a, b, env: Leaf("vec", [x * b.w for x in a.w]),
+    ("/", "vec", TT.NUM): lambda a, b, env: Leaf("vec", [x // b.w for x in a.w]),
+    ("fold", "vec"): fold,
+}
+
+
 def Repl(prompt="> "):
     builtins = {k: Leaf(TT.BUILTIN, x) for k, x in BUILTINS.items()}
     special = {k: Leaf(TT.SPECIAL, x) for k, x in SPECIAL.items()}
+    dispatches = {DISPATCH_SEP.join(map(str, k)): Leaf(TT.BUILTIN, v) for k, v in dispatch.items()}
+
     env = Env(None, from_dict={
         **special,
         **builtins,
+        **dispatches,
     })
-
-    set_dispatch(Leaf(TT.BUILTIN, lambda a, b, env: Leaf("vec", [x + y for x, y in zip(a.w, b.w)])),
-                 Tree(None, Leaf(None, "+"), None, Leaf(None, "vec")), env)
-    set_dispatch(Leaf(TT.BUILTIN, lambda a, b, env: Leaf("vec", [x + b.w for x in a.w])),
-                 Tree("", Leaf("", "+"), "", Tree("", Leaf("", "vec"), "", Leaf("", TT.NUM))), env)
-
     env = Env(env)  # dummy env
 
     while True:
