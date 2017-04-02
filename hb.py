@@ -361,6 +361,34 @@ def fold(a, b, env):
     return Leaf(TT.NUM, acc)
 
 
+def scan(a, b, env):
+    if isinstance(b, Tree):
+        zero = b.R.w
+        op = b.L.w
+    else:
+        op = b.w
+        zero = {
+            "+": 0,
+            "-": 0,
+            "*": 1,
+            "/": 1,
+        }[op]
+
+    op = {
+        "+": lambda a, b: a + b,
+        "-": lambda a, b: a - b,
+        "*": lambda a, b: a * b,
+        "/": lambda a, b: a // b,
+    }[op]
+
+    acc = zero
+    r = []
+    for x in a.w:
+        acc = op(acc, x)
+        r += [acc]
+    return Leaf("vec", r)
+
+
 dispatch = {
     ("+", "vec"): lambda a, b, env: Leaf("vec", [x + y for x, y in zip(a.w, b.w)]),
     ("-", "vec"): lambda a, b, env: Leaf("vec", [x - y for x, y in zip(a.w, b.w)]),
@@ -371,6 +399,7 @@ dispatch = {
     ("*", "vec", TT.NUM): lambda a, b, env: Leaf("vec", [x * b.w for x in a.w]),
     ("/", "vec", TT.NUM): lambda a, b, env: Leaf("vec", [x // b.w for x in a.w]),
     ("fold", "vec"): fold,
+    ("scan", "vec"): scan,
 }
 
 
