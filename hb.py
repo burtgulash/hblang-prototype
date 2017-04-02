@@ -31,7 +31,7 @@ def shift(a, b, cstack, env):
     env = Env(env)
     # So far continuation is just a pair of st and env
     continuation = Leaf(TT.CONTINUATION, (cc, env))
-    env.bind(a.w, continuation)
+    env.bind("cc", continuation)
     if b.tt == TT.THUNK:
         b = b.w
     return b, cstack, env
@@ -123,7 +123,14 @@ def wait(a, b, env):
 
 
 def set_dispatch(a, b, env):
-    dispatch_str = f"{b.L.tt}:{b.R.w}"
+    fn_name = b.L.w
+    if isinstance(b.R, Tree):
+        left_tt, right_tt = b.R.L.w, b.R.R.w
+        dispatch_str = f"{fn_name}:{left_tt}:{right_tt}"
+    else:
+        left_tt = b.R.w
+        dispatch_str = f"{fn_name}:{left_tt}"
+
     env.bind(dispatch_str, a)
     return a
 
@@ -143,7 +150,7 @@ BUILTINS = {
     "lt": lambda a, b, env: Leaf(TT.NUM, 1 if a.w <= b.w else 0),
     "gt": lambda a, b, env: Leaf(TT.NUM, 1 if a.w >= b.w else 0),
     "$": lambda a, b, env: env.lookup(b.w, a),
-    "to": lambda a, b, env: env.assign(b.w, a),
+    "to": lambda a, b, env: Leaf("vec", list(range(a.w, b.w))),
     "as": lambda a, b, env: env.bind(b.w, a),
     "is": lambda a, b, env: env.bind(a.w, b),
     "if": if_,
@@ -253,14 +260,18 @@ def Eval(x, env):
             elif H.tt == TT.CONTINUATION:
                 cc, env = H.w
                 # TODO add another delim?? MinCaml does
-                cstack.push(Frame(CT.Delim, L, H, R, env))
+                # cstack.push(Frame(CT.Delim, L, H, R, env))
                 cstack.scopy(cc)
                 x, ins = L, next_ins(L)
             elif H.tt == TT.PUNCTUATION and H.w in ".:`":
                 x = Tree(H.tt, L, H, R)
             elif H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
-                dispatch_str = f"{L.tt}:{H.w}"
-                op = env.lookup(dispatch_str, None)
+                if True:
+                    dispatch_str = f"{H.w}:{L.tt}:{R.tt}"
+                    op = env.lookup(dispatch_str, None)
+                if op is None:
+                    dispatch_str = f"{H.w}:{L.tt}"
+                    op = env.lookup(dispatch_str, None)
                 if op is None:
                     op = env.lookup(H.w, None)
                 if op is None:
@@ -329,6 +340,12 @@ def Repl(prompt="> "):
         **special,
         **builtins,
     })
+
+    set_dispatch(Leaf(TT.BUILTIN, lambda a, b, env: Leaf("vec", [x + y for x, y in zip(a.w, b.w)])),
+                 Tree(None, Leaf(None, "+"), None, Leaf(None, "vec")), env)
+    set_dispatch(Leaf(TT.BUILTIN, lambda a, b, env: Leaf("vec", [x + b.w for x in a.w])),
+                 Tree("", Leaf("", "+"), "", Tree("", Leaf("", "vec"), "", Leaf("", TT.NUM))), env)
+
     env = Env(env)  # dummy env
 
     while True:
