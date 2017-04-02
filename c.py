@@ -47,6 +47,8 @@ class Leaf:
     def __repr__(self):
         if self.tt == TT.FUNCTION:
             return f"{{{self.w}}}"
+        if self.tt == TT.CLOSURE:
+            return f"{{{self.w[1]}}}"
         if self.tt == TT.THUNK:
             return f"[{self.w}]"
         if self.tt in (TT.PUNCTUATION, TT.NUM,

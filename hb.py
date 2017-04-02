@@ -51,13 +51,15 @@ def get_type(a, b, env):
 
 
 def unwrap(H):
-    assert H.tt in (TT.FUNCTION, TT.THUNK)
+    assert H.tt in (TT.FUNCTION, TT.THUNK, TT.CLOSURE)
+    if H.tt == TT.CLOSURE:
+        return H.w[1]
     return H.w
 
 
-def bake(a, _, env):
-    assert a.tt == TT.FUNCTION
-    return Leaf(a.tt, bake_2(unwrap(a), env))
+# def bake(a, _, env):
+#     assert a.tt == TT.FUNCTION
+#     return Leaf(a.tt, bake_2(unwrap(a), env))
 
 
 # def bake_(x, env):
@@ -71,17 +73,17 @@ def bake(a, _, env):
 #     return unthunk(x, env)
 #
 #
-def bake_2(x, env):
-    if isinstance(x, Tree):
-        L, H, R = bake_2(x.L, env), bake_2(x.H, env), bake_2(x.R, env)
-        x = Tree(H.tt, L, H, R)
-        # if TT.THUNK not in (L.tt, H.tt, R.tt):
-        #     x = Eval(x, env)
-    elif isinstance(x, Leaf) and x.tt == TT.THUNK:
-        x = unwrap(x)
-        # if x.tt != TT.THUNK:
-        #     x = Eval(x, env)
-    return x
+ # def bake_2(x, env):
+ #     if isinstance(x, Tree):
+ #         L, H, R = bake_2(x.L, env), bake_2(x.H, env), bake_2(x.R, env)
+ #         x = Tree(H.tt, L, H, R)
+ #         # if TT.THUNK not in (L.tt, H.tt, R.tt):
+ #         #     x = Eval(x, env)
+ #     elif isinstance(x, Leaf) and x.tt == TT.THUNK:
+ #         x = unwrap(x)
+ #         # if x.tt != TT.THUNK:
+ #         #     x = Eval(x, env)
+ #     return x
 
 # def unthunk(x, env):
 #     if x.tt == TT.THUNK:
@@ -89,6 +91,24 @@ def bake_2(x, env):
 #     elif x.tt == TT.FUNCTION:
 #         return x
 #     return Eval(x, nv)
+
+
+def bake(a, b, env):
+     assert a.tt == TT.FUNCTION
+     assert b.tt in (TT.SYMBOL, TT.STRING)
+     return Leaf(a.tt, bake_(unwrap(a), b.w, env))
+
+
+def bake_(x, var, env):
+    if isinstance(x, Tree):
+        if isinstance(x.H, Leaf) and x.H.w == "$" and x.R.w == var:
+            return env.lookup(var, x.L)
+        return Tree(x.H.tt, bake_(x.L, var, env), bake_(x.H, var, env), bake_(x.R, var, env))
+    if x.tt == TT.THUNK:
+        return Leaf(x.tt, bake_(unwrap(x), var, env))
+    return x
+
+
 
 
 def invoke(a, b, env):
@@ -143,6 +163,9 @@ BUILTINS = {
     "*": lambda a, b, env: Leaf(TT.NUM, a.w * b.w),
     "/": lambda a, b, env: Leaf(TT.NUM, a.w // b.w),
     "=": lambda a, b, env: Leaf(TT.NUM, 1 if a.w == b.w else 0),
+    "dec": lambda a, b, env: env.assign(a.w, Leaf(TT.NUM, env.lookup(a.w, Leaf(TT.NUM, 1)).w - b.w)),
+    "inc": lambda a, b, env: env.assign(a.w, Leaf(TT.NUM, env.lookup(a.w, Leaf(TT.NUM, 0)).w + b.w)),
+    "T": get_type,
     "sametype": lambda a, b, env: Leaf(TT.NUM, 1 if a.tt == b.tt else 0),
     "dispatch": set_dispatch,
     "<": le,
@@ -154,12 +177,12 @@ BUILTINS = {
     "$": lambda a, b, env: env.lookup(b.w, a),
     "to": lambda a, b, env: Leaf("vec", list(range(a.w, b.w))),
     "as": lambda a, b, env: env.bind(b.w, a),
-    "is": lambda a, b, env: env.bind(a.w, b),
+    "assign": lambda a, b, env: env.assign(b.w, a),
+    "is": lambda a, b, env: env.assign(a.w, b),
     "if": if_,
     "then": lambda a, b, env: if_(b, a, env),
     "not": lambda a, b, env: Leaf(TT.NUM, 1 - a.w),
     "?": lambda a, b, env: if_(b, a, env),
-    "t": get_type,
     "|": lambda a, b, env: b,
     "bake": bake,
     "L": lambda a, _, env: a.L,
@@ -267,22 +290,6 @@ def Eval(x, env):
                 x, ins = L, next_ins(L)
             elif H.tt == TT.PUNCTUATION and H.w in ".:`":
                 x = Tree(H.tt, L, H, R)
-            elif H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
-                if True:
-                    dispatch_str = f"{H.w}:{L.tt}:{R.tt}"
-                    op = env.lookup(dispatch_str, None)
-                if op is None:
-                    dispatch_str = f"{H.w}:{L.tt}"
-                    op = env.lookup(dispatch_str, None)
-                if op is None:
-                    op = env.lookup(H.w, None)
-                if op is None:
-                    raise NoDispatch(f"Can't dispatch {H.w} on L: {L.tt}")
-                assert op.tt in (TT.CONTINUATION, TT.SPECIAL,
-                                 TT.BUILTIN, TT.THUNK, TT.FUNCTION)
-                x = Tree(op.tt, L, op, R)
-                ins = next_ins(x)
-                continue
             elif H.tt == TT.BUILTIN:
                 x = H.w(L, R, env)
                 ins = next_ins(x)
@@ -312,8 +319,34 @@ def Eval(x, env):
                 x = unwrap(H)
                 ins = next_ins(x)
                 continue
+            elif H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
+                if True:
+                    dispatch_str = f"{H.w}:{L.tt}:{R.tt}"
+                    op = env.lookup(dispatch_str, None)
+                if op is None:
+                    dispatch_str = f"{H.w}:{L.tt}"
+                    op = env.lookup(dispatch_str, None)
+                if op is None:
+                    op = env.lookup(H.w, None)
+                if op is None:
+                    raise NoDispatch(f"Can't dispatch {H.w} on L: {L.tt}")
+                assert op.tt in (TT.CONTINUATION, TT.SPECIAL,
+                                 TT.FUNCTION, TT.CLOSURE,
+                                 TT.BUILTIN, TT.THUNK)
+                H = op
+                ins = CT.Right
+                continue
+            elif H.tt == TT.CLOSURE:
+                cstack.push(Frame(CT.Function, L, H, R, env))
+                env, H = H.w
+                ins = CT.Right
+                continue
             else:
                 raise CantReduce(f"Can't reduce node: {H} of {H.tt}")
+
+        # Capture current environment and close over it
+        if isinstance(x, Leaf) and x.tt == TT.FUNCTION:
+            x = Leaf(TT.CLOSURE, (env, x))
 
         # Restore stack frame and apply continuation
         c = cstack.pop()
@@ -398,6 +431,7 @@ dispatch = {
     ("-", "vec", TT.NUM): lambda a, b, env: Leaf("vec", [x - b.w for x in a.w]),
     ("*", "vec", TT.NUM): lambda a, b, env: Leaf("vec", [x * b.w for x in a.w]),
     ("/", "vec", TT.NUM): lambda a, b, env: Leaf("vec", [x // b.w for x in a.w]),
+    ("@", "vec", TT.NUM): lambda a, b, env: Leaf(TT.NUM, a.w[b.w]),
     ("fold", "vec"): fold,
     ("scan", "vec"): scan,
 }
