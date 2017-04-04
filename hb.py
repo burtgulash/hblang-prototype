@@ -22,7 +22,7 @@ class CantReduce(Exception):
 
 def reset(a, b, cstack, env):
     cstack.spush()
-    if b.tt == TT.THUNK:
+    if isinstance(b, Leaf) and b.tt == TT.THUNK:
         b = b.w
     return b, cstack, env
 
@@ -34,7 +34,7 @@ def shift(a, b, cstack, env):
     # So far continuation is just a pair of st and env
     continuation = Leaf(TT.CONTINUATION, (cc, env))
     env.bind("cc", continuation)
-    if b.tt == TT.THUNK:
+    if isinstance(b, Leaf) and b.tt == TT.THUNK:
         b = b.w
     return b, cstack, env
 
@@ -47,6 +47,8 @@ def setenv(H, env):
 
 
 def get_type(a, b, env):
+    if isinstance(a, Tree):
+        return Leaf(TT.SYMBOL, "Tree")
     return Leaf(TT.SYMBOL, a.tt.name)
 
 
@@ -103,8 +105,8 @@ def bake_(x, var, env):
     if isinstance(x, Tree):
         if isinstance(x.H, Leaf) and x.H.w == "$" and x.R.w == var:
             return env.lookup(var, x.L)
-        return Tree(x.H.tt, bake_(x.L, var, env), bake_(x.H, var, env), bake_(x.R, var, env))
-    if x.tt == TT.THUNK:
+        return Tree(bake_(x.L, var, env), bake_(x.H, var, env), bake_(x.R, var, env))
+    elif x.tt == TT.THUNK:
         return Leaf(x.tt, bake_(unwrap(x), var, env))
     return x
 
@@ -112,7 +114,7 @@ def bake_(x, var, env):
 
 
 def invoke(a, b, env):
-    return Tree(b.tt, a, b, Void)
+    return Tree(a, b, Void)
 
 
 def if_(a, b, env):
@@ -253,7 +255,6 @@ def Eval(x, env):
     # Stored instruction pointer
     ins = next_ins(x)
 
-
     while True:
         if ins >= CT.Tree:
             if ins == CT.Tree:
@@ -289,7 +290,7 @@ def Eval(x, env):
                 cstack.scopy(cc)
                 x, ins = L, next_ins(L)
             elif H.tt == TT.PUNCTUATION and H.w in ".:`":
-                x = Tree(H.tt, L, H, R)
+                x = Tree(L, H, R)
             elif H.tt == TT.BUILTIN:
                 x = H.w(L, R, env)
                 ins = next_ins(x)

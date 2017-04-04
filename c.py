@@ -59,8 +59,7 @@ class Leaf:
 
 class Tree:
 
-    def __init__(self, tt, L, H, R):
-        self.tt = tt
+    def __init__(self, L, H, R):
         self.L = L
         self.H = H
         self.R = R
@@ -252,7 +251,7 @@ def opposite_paren(paren):
 # TODO check parenthesis type here or in lexing?
 def ParenParse(stream):
     x = stream.pop()
-    if x.tt == TT.LPAREN:
+    if isinstance(x, Leaf) and x.tt == TT.LPAREN:
         paren_type = x.w
         LParse(stream, opposite_paren(paren_type))
         x = quote(stream.pop(), paren_type)
@@ -277,7 +276,7 @@ def RParse(stream):
         R = rights.pop()
         Y = rights.pop()
         L = rights.pop()
-        rights.append(Tree(Y.tt, L, Y, R))
+        rights.append(Tree(L, Y, R))
 
     assert len(rights) == 1
     return rights.pop()
@@ -287,7 +286,7 @@ def LParse(stream, expected_end):
     while len(stream) > 1:
         # Handle L
         L = ParenParse(stream)
-        if L.tt == TT.RPAREN:
+        if isinstance(L, Leaf) and L.tt == TT.RPAREN:
             # TODO check if they match at least
             stream.append(Void)
             break
@@ -298,7 +297,7 @@ def LParse(stream, expected_end):
             # Expression is separated by |
             LParse(stream, expected_end)
             R = stream.pop()
-            stream.append(Tree(H.tt, L, H, R))
+            stream.append(Tree(L, H, R))
             break
 
         if end_of_expr(H):
@@ -313,7 +312,7 @@ def LParse(stream, expected_end):
         R = RParse(stream)
 
         # Create new node from L, H, R gathered above
-        stream.append(Tree(H.tt, L, H, R))
+        stream.append(Tree(L, H, R))
 
 
 if __name__ == "__main__":
