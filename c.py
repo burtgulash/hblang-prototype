@@ -64,6 +64,10 @@ class Tree:
         self.H = H
         self.R = R
 
+    @property
+    def tt(self):
+        return TT.TREE
+
     def show(n, function=False):
         # lparen = '{' if function else '['
         # rparen = '}' if function else ']'
@@ -101,6 +105,7 @@ class TT(Enum):
     NEWLINE = 16
     CONTINUATION = 17
     SPECIAL = 18
+    TREE = 19
 
 
 Void = Leaf(TT.VOID, "void")

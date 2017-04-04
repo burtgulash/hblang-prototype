@@ -53,10 +53,11 @@ def get_type(a, b, env):
 
 
 def unwrap(H):
-    assert H.tt in (TT.FUNCTION, TT.THUNK, TT.CLOSURE)
     if H.tt == TT.CLOSURE:
         return H.w[1]
-    return H.w
+    if H.tt in (TT.FUNCTION, TT.THUNK):
+        return H.w
+    return H
 
 
 # def bake(a, _, env):
@@ -181,8 +182,8 @@ BUILTINS = {
     "as": lambda a, b, env: env.bind(b.w, a),
     "assign": lambda a, b, env: env.assign(b.w, a),
     "is": lambda a, b, env: env.assign(a.w, b),
-    "if": if_,
-    "then": lambda a, b, env: if_(b, a, env),
+    "if": lambda a, b, env: unwrap(a.L),
+    # "then": lambda a, b, env: if_(b, a, env),
     "not": lambda a, b, env: Leaf(TT.NUM, 1 - a.w),
     "?": lambda a, b, env: if_(b, a, env),
     "|": lambda a, b, env: b,
@@ -453,6 +454,7 @@ dispatch = {
     ("-", "vec", "0"): left,
     ("*", "vec", "1"): left,
     ("/", "vec", "1"): left,
+    ("if", TT.TREE, "0"): lambda a, b, env: unwrap(a.R),
 }
 
 
