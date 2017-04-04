@@ -321,10 +321,16 @@ def Eval(x, env):
                 ins = next_ins(x)
                 continue
             elif H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
-                if True:
+                if R.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.NUM):
+                    # Dispatch on L.type and R.value
+                    dispatch_str = f"{H.w}:{L.tt}:{R.w}"
+                    op = env.lookup(dispatch_str, None)
+                if op is None:
+                    # Dispatch on L.type and R.type
                     dispatch_str = f"{H.w}:{L.tt}:{R.tt}"
                     op = env.lookup(dispatch_str, None)
                 if op is None:
+                    # Dispatch on L.type and Fn name
                     dispatch_str = f"{H.w}:{L.tt}"
                     op = env.lookup(dispatch_str, None)
                 if op is None:
@@ -367,6 +373,14 @@ def Eval(x, env):
             R = x
         else:
             assert False
+
+
+def left(a, b, env):
+    return a
+
+
+def right(a, b, env):
+    return b
 
 
 def fold(a, b, env):
@@ -435,6 +449,10 @@ dispatch = {
     ("@", "vec", TT.NUM): lambda a, b, env: Leaf(TT.NUM, a.w[b.w]),
     ("fold", "vec"): fold,
     ("scan", "vec"): scan,
+    ("+", "vec", "0"): left,
+    ("-", "vec", "0"): left,
+    ("*", "vec", "1"): left,
+    ("/", "vec", "1"): left,
 }
 
 
