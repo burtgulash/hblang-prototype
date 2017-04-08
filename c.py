@@ -107,6 +107,9 @@ class TT(Enum):
     SPECIAL = 18
     TREE = 19
 
+    def __str__(self):
+        return self.name
+
 
 Void = Leaf(TT.VOID, "void")
 EOF = Leaf(TT.END, "END")

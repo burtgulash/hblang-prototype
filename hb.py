@@ -58,7 +58,7 @@ def setenv(H, env):
 
 def get_type(a, b, env):
     if isinstance(a, Tree):
-        return Leaf(TT.SYMBOL, "Tree")
+        return Leaf(TT.SYMBOL, TT.TREE)
     return Leaf(TT.SYMBOL, a.tt.name)
 
 
@@ -205,7 +205,6 @@ BUILTINS = {
     "unwrap": lambda a, _, env: unwrap(a),
     ",": app,
     "vec": lambda a, _, env: Leaf("vec", []),
-    # "callcc": callcc,
     "print": print_fn,
     "wait": wait,
     "!": invoke,
@@ -254,11 +253,27 @@ class Env:
 
 def tt2env(tt, env):
     ttstr = str(tt)
-    path = ttstr.split("^")[:-1] # exclude actual object tt
+    path = ttstr.split(DISPATCH_SEP)[:-1] # exclude actual object tt
+    return path2env(path, env)
+
+
+def tree2env(x, env):
+    path = []
+    while isinstance(x.R, Tree):
+        path.append(x.L.w)
+        x = x.R
+    path.append(x.L.w,)
+    return path, x.R.w
+
+
+def path2env(path, env):
     for p in path:
         env = env.lookup(p, None)
+        assert env.tt == "ENV"
+        env = env.w
     assert env is not None
     return env
+
 
 
 def next_ins(x):
@@ -275,6 +290,9 @@ def Eval(x, env):
     cstack.push(Frame(CT.Return, None, None, None, env))
     # Stored instruction pointer
     ins = next_ins(x)
+
+    # TODO hack:
+    env.modules = []
 
     while True:
         if ins >= CT.Tree:
@@ -341,25 +359,39 @@ def Eval(x, env):
                 x = unwrap(H)
                 ins = next_ins(x)
                 continue
-            elif H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.STRING, TT.SEPARATOR): # separator as fallback? TODO remove it
-                dispatch_env = tt2env(L.tt, env)
+            elif H.tt == TT.TREE:
+                path, fn = tree2env(H, env)
+                fn_env = path2env(path, env)
+                op = fn_env.lookup(fn, None)
+                if op is None:
+                    raise NoDispatch(f"Can't find module function {H} on L: {L.tt}")
+                assert op.tt in (TT.CONTINUATION, TT.SPECIAL,
+                                 TT.FUNCTION, TT.CLOSURE,
+                                 TT.BUILTIN, TT.THUNK)
+                H = op
+                ins = CT.Right
+                continue
+            elif H.tt in (TT.PUNCTUATION, TT.SYMBOL,
+                          TT.STRING, TT.SEPARATOR):
+                # separator as fallback if no TCO? TODO remove it
                 fn = H.w
-                if H.tt == TT.STRING:
-                    fn = fn.split("^")[-1]
-                if R.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.NUM):
-                    # Dispatch on L.type and R.value
-                    dispatch_str = f"{fn}:{L.tt}:{R.w}"
-                    op = dispatch_env.lookup(dispatch_str, None)
+                op = env.lookup(fn, None)
                 if op is None:
-                    # Dispatch on L.type and R.type
-                    dispatch_str = f"{fn}:{L.tt}:{R.tt}"
-                    op = dispatch_env.lookup(dispatch_str, None)
-                if op is None:
-                    # Dispatch on L.type and Fn name
-                    dispatch_str = f"{fn}:{L.tt}"
-                    op = dispatch_env.lookup(dispatch_str, None)
-                if op is None:
-                    op = env.lookup(fn, None)
+                    # Dispatch on left symbol (like a method)
+                    dispatch_env = env.modules.get(L.tt, env)
+                    if R.tt in (TT.PUNCTUATION, TT.SYMBOL,
+                                TT.STRING, TT.NUM):
+                        # dispatch on l.type and r.value
+                        dispatch_str = f"{fn}:{L.tt}:{R.w}"
+                        op = dispatch_env.lookup(dispatch_str, None)
+                    if op is None:
+                        # Dispatch on L.type and R.type
+                        dispatch_str = f"{fn}:{L.tt}:{R.tt}"
+                        op = dispatch_env.lookup(dispatch_str, None)
+                    if op is None:
+                        # Dispatch on L.type and Fn name
+                        dispatch_str = f"{fn}:{L.tt}"
+                        op = dispatch_env.lookup(dispatch_str, None)
                 if op is None:
                     raise NoDispatch(f"Can't dispatch {fn} on L: {L.tt}")
                 assert op.tt in (TT.CONTINUATION, TT.SPECIAL,
