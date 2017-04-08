@@ -155,7 +155,7 @@ def unescape(s):
 
 
 def string(tok):
-    # tok = tok[1:-1]
+    tok = tok[1:-1] # strip quotes
     return "".join(unescape(tok))
 
 

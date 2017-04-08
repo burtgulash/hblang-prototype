@@ -20,6 +20,16 @@ class CantReduce(Exception):
     pass
 
 
+def load_as(a, b, env):
+    with open(a.w) as f:
+        code = f.read()
+
+    new_env = Env(env)
+    x, new_env = Execute(code, new_env)
+    env.bind(b.w, Leaf("ENV", new_env))
+    return x
+
+
 def reset(a, b, cstack, env):
     cstack.spush()
     if isinstance(b, Leaf) and b.tt == TT.THUNK:
@@ -199,6 +209,7 @@ BUILTINS = {
     "print": print_fn,
     "wait": wait,
     "!": invoke,
+    "load_as": load_as,
 }
 
 
@@ -239,6 +250,15 @@ class Env:
 
     def __repr__(self):
         return repr(self.e)
+
+
+def tt2env(tt, env):
+    ttstr = str(tt)
+    path = ttstr.split("^")[:-1] # exclude actual object tt
+    for p in path:
+        env = env.lookup(p, None)
+    assert env is not None
+    return env
 
 
 def next_ins(x):
@@ -321,23 +341,27 @@ def Eval(x, env):
                 x = unwrap(H)
                 ins = next_ins(x)
                 continue
-            elif H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.SEPARATOR):
+            elif H.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.STRING, TT.SEPARATOR): # separator as fallback? TODO remove it
+                dispatch_env = tt2env(L.tt, env)
+                fn = H.w
+                if H.tt == TT.STRING:
+                    fn = fn.split("^")[-1]
                 if R.tt in (TT.PUNCTUATION, TT.SYMBOL, TT.NUM):
                     # Dispatch on L.type and R.value
-                    dispatch_str = f"{H.w}:{L.tt}:{R.w}"
-                    op = env.lookup(dispatch_str, None)
+                    dispatch_str = f"{fn}:{L.tt}:{R.w}"
+                    op = dispatch_env.lookup(dispatch_str, None)
                 if op is None:
                     # Dispatch on L.type and R.type
-                    dispatch_str = f"{H.w}:{L.tt}:{R.tt}"
-                    op = env.lookup(dispatch_str, None)
+                    dispatch_str = f"{fn}:{L.tt}:{R.tt}"
+                    op = dispatch_env.lookup(dispatch_str, None)
                 if op is None:
                     # Dispatch on L.type and Fn name
-                    dispatch_str = f"{H.w}:{L.tt}"
-                    op = env.lookup(dispatch_str, None)
+                    dispatch_str = f"{fn}:{L.tt}"
+                    op = dispatch_env.lookup(dispatch_str, None)
                 if op is None:
-                    op = env.lookup(H.w, None)
+                    op = env.lookup(fn, None)
                 if op is None:
-                    raise NoDispatch(f"Can't dispatch {H.w} on L: {L.tt}")
+                    raise NoDispatch(f"Can't dispatch {fn} on L: {L.tt}")
                 assert op.tt in (TT.CONTINUATION, TT.SPECIAL,
                                  TT.FUNCTION, TT.CLOSURE,
                                  TT.BUILTIN, TT.THUNK)
@@ -458,6 +482,23 @@ dispatch = {
 }
 
 
+def Execute(code, env):
+    try:
+        x = code
+        x = Lex(x)
+        # print("LEX", y)
+        x = Parse(x)
+        # print("PARSE", y)
+        x = Eval(x, env)
+        return x, env
+    except ParseError as err:
+        print(f"Parse error: {err}", file=sys.stderr)
+    except (NoDispatch, CantReduce, TypeError) as err:
+        print(err, file=sys.stderr)
+
+    return None, None
+
+
 def Repl(prompt="> "):
     builtins = {k: Leaf(TT.BUILTIN, x) for k, x in BUILTINS.items()}
     special = {k: Leaf(TT.SPECIAL, x) for k, x in SPECIAL.items()}
@@ -473,17 +514,8 @@ def Repl(prompt="> "):
     while True:
         try:
             x = input(prompt)
-            x = Lex(x)
-            # print("LEX", y)
-            x = Parse(x)
-            # print("PARSE", y)
-            x = Eval(x, env)
-            if x is not None:
-                print(x)
-        except ParseError as err:
-            print(f"Parse error: {err}", file=sys.stderr)
-        except (NoDispatch, CantReduce, TypeError) as err:
-            print(err, file=sys.stderr)
+            x, _ = Execute(x, env)
+            print(x)
         except (EOFError, KeyboardInterrupt):
             break
 
