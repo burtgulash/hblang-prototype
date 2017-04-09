@@ -3,7 +3,6 @@
 import sys
 import time
 
-import readline
 from c import Lex, Parse, \
               ParseError, TT, Tree, Leaf, Void
 
@@ -543,7 +542,7 @@ def Execute(code, env):
     return None, None
 
 
-def Repl(prompt="> "):
+def prepare_env():
     builtins = {k: Leaf(TT.BUILTIN, x) for k, x in BUILTINS.items()}
     special = {k: Leaf(TT.SPECIAL, x) for k, x in SPECIAL.items()}
     # dispatches = {DISPATCH_SEP.join(map(str, k)): Leaf(TT.BUILTIN, v) for k, v in dispatch.items()}
@@ -555,6 +554,13 @@ def Repl(prompt="> "):
         **special,
     })
     env = Env(env)  # dummy env
+    return env
+
+
+def Repl(env, prompt="> "):
+    import readline
+    readline.parse_and_bind('tab: complete')
+    readline.parse_and_bind('set editing-mode vi')
 
     while True:
         try:
@@ -565,7 +571,33 @@ def Repl(prompt="> "):
             break
 
 
+def run(argv):
+    env = prepare_env()
+    if cmd == "repl":
+        Repl(env)
+    elif cmd == "run":
+        if len(argv) < 3:
+            src = sys.stdin.read()
+        else:
+            f = argv[2]
+            if f == "-":
+                src = sys.stdin.read()
+            else:
+                with open(f) as inp:
+                    src = ff.read()
+        x, env = Execute(src, env)
+        print(x)
+
+
 if __name__ == "__main__":
-    readline.parse_and_bind('tab: complete')
-    readline.parse_and_bind('set editing-mode vi')
-    Repl()
+
+    if len(sys.argv) >= 2:
+        cmd = sys.argv[1]
+    else:
+        print("Missing command (repl|run)", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        run(sys.argv)
+    except KeyboardInterrupt:
+        pass
