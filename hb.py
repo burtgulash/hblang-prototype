@@ -20,24 +20,24 @@ class CantReduce(Exception):
     pass
 
 
-def load_as(a, b, env):
+def load_as(a, b, cstack, env):
     with open(a.w) as f:
         code = f.read()
 
     new_env = Env(env)
     x, new_env = Execute(code, new_env)
     env.bind(b.w, Leaf("ENV", new_env))
-    return x
+    return x, env, cstack
 
 
-def reset(a, b, cstack, env):
+def reset(a, b, env, cstack):
     cstack.spush()
     if isinstance(b, Leaf) and b.tt == TT.THUNK:
         b = b.w
-    return b, cstack, env
+    return b, env, cstack
 
 
-def shift(a, b, cstack, env):
+def shift(a, b, env, cstack):
     cc = cstack.spop()
     # Don't let the continuation binding propagate to parent environment
     env = Env(env)
@@ -46,7 +46,7 @@ def shift(a, b, cstack, env):
     env.bind("cc", continuation)
     if isinstance(b, Leaf) and b.tt == TT.THUNK:
         b = b.w
-    return b, cstack, env
+    return b, env, cstack
 
 
 def setenv(H, env):
@@ -291,9 +291,6 @@ def Eval(x, env):
     # Stored instruction pointer
     ins = next_ins(x)
 
-    # TODO hack:
-    env.modules = []
-
     while True:
         if ins >= CT.Tree:
             if ins == CT.Tree:
@@ -335,7 +332,7 @@ def Eval(x, env):
                 ins = next_ins(x)
                 continue
             elif H.tt == TT.SPECIAL:
-                x, cstack, env = H.w(L, R, cstack, env)
+                x, env, cstack = H.w(L, R, env, cstack)
                 ins = next_ins(x)
                 continue
             elif H.tt == TT.THUNK:
@@ -378,19 +375,22 @@ def Eval(x, env):
                 op = env.lookup(fn, None)
                 if op is None:
                     # Dispatch on left symbol (like a method)
-                    dispatch_env = env.modules.get(L.tt, env)
+                    dispatch_env = env.get(L.tt)
+                    if not dispatch_env or dispatch_env.tt != "ENV":
+                        dispatch_env = env
+
                     if R.tt in (TT.PUNCTUATION, TT.SYMBOL,
                                 TT.STRING, TT.NUM):
                         # dispatch on l.type and r.value
-                        dispatch_str = f"{fn}:{L.tt}:{R.w}"
+                        dispatch_str = f"{fn}:{R.w}"
                         op = dispatch_env.lookup(dispatch_str, None)
                     if op is None:
                         # Dispatch on L.type and R.type
-                        dispatch_str = f"{fn}:{L.tt}:{R.tt}"
+                        dispatch_str = f"{fn}:{R.tt}"
                         op = dispatch_env.lookup(dispatch_str, None)
                     if op is None:
                         # Dispatch on L.type and Fn name
-                        dispatch_str = f"{fn}:{L.tt}"
+                        dispatch_str = f"{fn}"
                         op = dispatch_env.lookup(dispatch_str, None)
                 if op is None:
                     raise NoDispatch(f"Can't dispatch {fn} on L: {L.tt}")
@@ -416,7 +416,7 @@ def Eval(x, env):
         c = cstack.pop()
         ins = c.ct
         if ins == CT.Return:
-            return x
+            return x, env
 
         L, H, R, env = c.L, c.H, c.R, c.env
         # print("Restore", L, H, R, c.ct.name, id(env), env)
@@ -494,24 +494,36 @@ def scan(a, b, env):
     return Leaf("vec", r)
 
 
-dispatch = {
-    ("+", "vec"): lambda a, b, env: Leaf("vec", [x + y for x, y in zip(a.w, b.w)]),
-    ("-", "vec"): lambda a, b, env: Leaf("vec", [x - y for x, y in zip(a.w, b.w)]),
-    ("*", "vec"): lambda a, b, env: Leaf("vec", [x * y for x, y in zip(a.w, b.w)]),
-    ("/", "vec"): lambda a, b, env: Leaf("vec", [x // y for x, y in zip(a.w, b.w)]),
-    ("+", "vec", TT.NUM): lambda a, b, env: Leaf("vec", [x + b.w for x in a.w]),
-    ("-", "vec", TT.NUM): lambda a, b, env: Leaf("vec", [x - b.w for x in a.w]),
-    ("*", "vec", TT.NUM): lambda a, b, env: Leaf("vec", [x * b.w for x in a.w]),
-    ("/", "vec", TT.NUM): lambda a, b, env: Leaf("vec", [x // b.w for x in a.w]),
-    ("@", "vec", TT.NUM): lambda a, b, env: Leaf(TT.NUM, a.w[b.w]),
-    ("fold", "vec"): fold,
-    ("scan", "vec"): scan,
-    ("+", "vec", "0"): left,
-    ("-", "vec", "0"): left,
-    ("*", "vec", "1"): left,
-    ("/", "vec", "1"): left,
-    ("if", TT.TREE, "0"): lambda a, b, env: unwrap(a.R),
+modules = {
+    "vec": {
+        "+": lambda a, b, env: Leaf("vec", [x + y for x, y in zip(a.w, b.w)]),
+        "-": lambda a, b, env: Leaf("vec", [x - y for x, y in zip(a.w, b.w)]),
+        "*": lambda a, b, env: Leaf("vec", [x * y for x, y in zip(a.w, b.w)]),
+        "/": lambda a, b, env: Leaf("vec", [x // y for x, y in zip(a.w, b.w)]),
+        ("+", TT.NUM): lambda a, b, env: Leaf("vec", [x + b.w for x in a.w]),
+        ("-", TT.NUM): lambda a, b, env: Leaf("vec", [x - b.w for x in a.w]),
+        ("*", TT.NUM): lambda a, b, env: Leaf("vec", [x * b.w for x in a.w]),
+        ("/", TT.NUM): lambda a, b, env: Leaf("vec", [x // b.w for x in a.w]),
+        ("@", TT.NUM): lambda a, b, env: Leaf(TT.NUM, a.w[b.w]),
+        "fold": fold,
+        "scan": scan,
+        ("+", "0"): left,
+        ("-", "0"): left,
+        ("*", "1"): left,
+        ("/", "1"): left,
+    },
+    TT.TREE: {
+        ("if", "0"): lambda a, b, env: unwrap(a.R),
+    }
 }
+
+def as_module(mod_dict):
+    d = {}
+    for k, v in mod_dict.items():
+        if not isinstance(k, str):
+            k = DISPATCH_SEP.join(map(str, k))
+        d[k] = Leaf(TT.BUILTIN, v)
+    return d
 
 
 def Execute(code, env):
@@ -521,7 +533,7 @@ def Execute(code, env):
         # print("LEX", y)
         x = Parse(x)
         # print("PARSE", y)
-        x = Eval(x, env)
+        x, env = Eval(x, env)
         return x, env
     except ParseError as err:
         print(f"Parse error: {err}", file=sys.stderr)
@@ -534,12 +546,13 @@ def Execute(code, env):
 def Repl(prompt="> "):
     builtins = {k: Leaf(TT.BUILTIN, x) for k, x in BUILTINS.items()}
     special = {k: Leaf(TT.SPECIAL, x) for k, x in SPECIAL.items()}
-    dispatches = {DISPATCH_SEP.join(map(str, k)): Leaf(TT.BUILTIN, v) for k, v in dispatch.items()}
+    # dispatches = {DISPATCH_SEP.join(map(str, k)): Leaf(TT.BUILTIN, v) for k, v in dispatch.items()}
+    mods = {k: Leaf("ENV", Env(None, from_dict=as_module(mod))) for k, mod in modules.items()}
 
     env = Env(None, from_dict={
-        **special,
+        **mods,
         **builtins,
-        **dispatches,
+        **special,
     })
     env = Env(env)  # dummy env
 
