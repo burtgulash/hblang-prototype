@@ -106,6 +106,7 @@ class TT(Enum):
     CONTINUATION = 17
     SPECIAL = 18
     TREE = 19
+    OBJECT = 20
 
     def __str__(self):
         return self.name

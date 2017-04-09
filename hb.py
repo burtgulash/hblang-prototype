@@ -19,14 +19,17 @@ class CantReduce(Exception):
     pass
 
 
-def load_as(a, b, cstack, env):
-    with open(a.w) as f:
+def new_object(a, b, env):
+    return Leaf(TT.OBJECT, Env(None))
+
+
+def load(a, b, env):
+    with open(b.w) as f:
         code = f.read()
 
     new_env = Env(env)
     x, new_env = Execute(code, new_env)
-    env.bind(b.w, Leaf("ENV", new_env))
-    return x, env, cstack
+    return Leaf(TT.OBJECT, new_env)
 
 
 def reset(a, b, env, cstack):
@@ -207,7 +210,8 @@ BUILTINS = {
     "print": print_fn,
     "wait": wait,
     "!": invoke,
-    "load_as": load_as,
+    "load": load,
+    "object": new_object,
 }
 
 
@@ -268,7 +272,7 @@ def tree2env(x, env):
 def path2env(path, env):
     for p in path:
         env = env.lookup(p, None)
-        assert env.tt == "ENV"
+        assert env.tt == TT.OBJECT
         env = env.w
     assert env is not None
     return env
@@ -347,7 +351,7 @@ def Eval(x, env):
                     or self_h is not H:
                     cstack.push(Frame(CT.Function, L, H, R, env))
                     env = Env(env)
-                # print("ENV", id(env))
+                # print(TT.OBJECT, id(env))
 
                 env.bind("x", L)
                 env.bind("self", H)
@@ -374,8 +378,10 @@ def Eval(x, env):
                 op = env.lookup(fn, None)
                 if op is None:
                     # Dispatch on left symbol (like a method)
-                    dispatch_env = env.get(L.tt)
-                    if not dispatch_env or dispatch_env.tt != "ENV":
+                    dispatch_env = env.lookup(L.tt, None)
+                    if dispatch_env and dispatch_env.tt == TT.OBJECT:
+                        dispatch_env = dispatch_env.w
+                    else:
                         dispatch_env = env
 
                     if R.tt in (TT.PUNCTUATION, TT.SYMBOL,
@@ -513,6 +519,10 @@ modules = {
     },
     TT.TREE: {
         ("if", "0"): lambda a, b, env: unwrap(a.R),
+    },
+    TT.OBJECT: {
+        "clone": lambda a, b, env: Leaf(TT.OBJECT, a.w),
+        ("@", TT.TREE): lambda a, b, env: env.bind(b.L.w, b.R) # TODO implement assignment
     }
 }
 
@@ -546,7 +556,7 @@ def prepare_env():
     builtins = {k: Leaf(TT.BUILTIN, x) for k, x in BUILTINS.items()}
     special = {k: Leaf(TT.SPECIAL, x) for k, x in SPECIAL.items()}
     # dispatches = {DISPATCH_SEP.join(map(str, k)): Leaf(TT.BUILTIN, v) for k, v in dispatch.items()}
-    mods = {k: Leaf("ENV", Env(None, from_dict=as_module(mod))) for k, mod in modules.items()}
+    mods = {k: Leaf(TT.OBJECT, Env(None, from_dict=as_module(mod))) for k, mod in modules.items()}
 
     env = Env(None, from_dict={
         **mods,
@@ -590,7 +600,6 @@ def run(argv):
 
 
 if __name__ == "__main__":
-
     if len(sys.argv) >= 2:
         cmd = sys.argv[1]
     else:
