@@ -19,8 +19,39 @@ class CantReduce(Exception):
     pass
 
 
-def new_object(a, b, env):
-    return Leaf(TT.OBJECT, Env(None))
+class Env:
+
+    def __init__(self, parent, from_dict=None):
+        self.parent = parent
+        self.e = {**(from_dict or {})}
+
+    def lookup(self, name, or_else):
+        env = self.find_env(name)
+        if not env:
+            return or_else
+        return env.e[name]
+
+    def find_env(self, name):
+        # TODO optimize self-recursion in tail calls by reusing env
+        if name in self.e:
+            return self
+        elif self.parent is not None:
+            return self.parent.find_env(name)
+        return None
+
+    def bind(self, name, value):
+        self.e[name] = value
+        return value
+
+    def assign(self, name, value):
+        env = self.find_env(name) or self
+        env.bind(name, value)
+        return value
+
+    def __repr__(self):
+        return repr(self.e)
+
+
 
 
 def load(a, b, env):
@@ -172,6 +203,10 @@ def set_dispatch(a, b, env):
     return a
 
 
+def new_object(a, b, env):
+    return Leaf(TT.OBJECT, Env(None))
+
+
 BUILTINS = {
     "+": lambda a, b, env: Leaf(TT.NUM, a.w + b.w),
     "-": lambda a, b, env: Leaf(TT.NUM, a.w - b.w),
@@ -181,6 +216,7 @@ BUILTINS = {
     "dec": lambda a, b, env: env.assign(a.w, Leaf(TT.NUM, env.lookup(a.w, Leaf(TT.NUM, 1)).w - b.w)),
     "inc": lambda a, b, env: env.assign(a.w, Leaf(TT.NUM, env.lookup(a.w, Leaf(TT.NUM, 0)).w + b.w)),
     "T": get_type,
+    "type": get_type,
     "sametype": lambda a, b, env: Leaf(TT.NUM, 1 if a.tt == b.tt else 0),
     "dispatch": set_dispatch,
     "<": le,
@@ -211,7 +247,8 @@ BUILTINS = {
     "wait": wait,
     "!": invoke,
     "load": load,
-    "object": new_object,
+    "O": new_object(Void, Void, None),
+    "object": new_object(Void, Void, None),
 }
 
 
@@ -219,39 +256,6 @@ SPECIAL = {
     "cpush": reset,
     "cpop": shift,
 }
-
-
-class Env:
-
-    def __init__(self, parent, from_dict=None):
-        self.parent = parent
-        self.e = {**(from_dict or {})}
-
-    def lookup(self, name, or_else):
-        env = self.find_env(name)
-        if not env:
-            return or_else
-        return env.e[name]
-
-    def find_env(self, name):
-        # TODO optimize self-recursion in tail calls by reusing env
-        if name in self.e:
-            return self
-        elif self.parent is not None:
-            return self.parent.find_env(name)
-        return None
-
-    def bind(self, name, value):
-        self.e[name] = value
-        return value
-
-    def assign(self, name, value):
-        env = self.find_env(name) or self
-        env.bind(name, value)
-        return value
-
-    def __repr__(self):
-        return repr(self.e)
 
 
 def tt2env(tt, env):
