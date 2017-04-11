@@ -111,7 +111,10 @@ def bake_vars(a, _, env):
 
 def bake_vars_(x):
     if isinstance(x, Tree):
-        L, H, R = bake_vars_(x.L), bake_vars_(x.H), bake_vars_(x.R)
+        L, R = bake_vars_(x.L), bake_vars_(x.R)
+        H = x.H
+        if isinstance(H, Tree):
+            H = bake_vars(H)
         x = Tree(L, H, R)
     elif x.tt in (TT.FUNCTION, TT.THUNK, TT.CLOSURE):
         x = Leaf(x.tt, bake_vars_(unwrap(x)))
