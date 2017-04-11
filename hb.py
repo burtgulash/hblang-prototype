@@ -179,11 +179,9 @@ def invoke(a, b, env):
 
 
 def if_(a, b, env):
-    assert a.tt == TT.CONS and isinstance(a, Tree)
+    assert isinstance(a, Tree)
     conseq = a.R if b.w == 0 else a.L
-    if conseq.tt in (TT.FUNCTION, TT.THUNK):
-        conseq = conseq.w
-    return conseq
+    return unwrap(conseq)
 
 
 le = lambda a, b, env: Leaf(TT.NUM, 1 if a.w < b.w else 0)
@@ -416,11 +414,12 @@ def Eval(x, env):
                 else:
                     dispatch_env = env
 
-                if R.tt in (TT.PUNCTUATION, TT.CONS, TT.SYMBOL,
-                            TT.STRING, TT.NUM):
-                    # dispatch on l.type and r.value
-                    dispatch_str = f"{fn}:{R.w}"
-                    op = dispatch_env.lookup(dispatch_str, None)
+                # TODO don't dispatch on value
+                # if R.tt in (TT.PUNCTUATION, TT.CONS, TT.SYMBOL,
+                #             TT.STRING, TT.NUM):
+                #     # dispatch on l.type and r.value
+                #     dispatch_str = f"{fn}:{R.w}"
+                #     op = dispatch_env.lookup(dispatch_str, None)
                 if op is None:
                     # Dispatch on L.type and R.type
                     dispatch_str = f"{fn}:{R.tt}"
@@ -552,7 +551,7 @@ modules = {
         ("/", "1"): left,
     },
     TT.TREE: {
-        ("if", "0"): lambda a, b, env: unwrap(a.R),
+        "if": if_,
     },
     TT.OBJECT: {
         "clone": lambda a, b, env: Leaf(TT.OBJECT, a.w),
@@ -634,13 +633,24 @@ def run(argv):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) >= 2:
-        cmd = sys.argv[1]
-    else:
-        print("Missing command (repl|run)", file=sys.stderr)
-        sys.exit(1)
+    env = prepare_env()
 
-    try:
-        run(sys.argv)
-    except KeyboardInterrupt:
-        pass
+    if len(sys.argv) == 1:
+        try:
+            Repl(env)
+        except KeyboardInterrupt:
+            pass
+    elif len(sys.argv) >= 2:
+        cmd = sys.argv[1]
+        if cmd == "run":
+            if len(sys.argv) >= 3:
+                with open(sys.argv[2]) as f:
+                    src = f.read()
+            else:
+                src = sys.stdin.read()
+
+            x, env = Execute(src, env)
+            print(x)
+        else:
+            print("Missing command (run)", file=sys.stderr)
+            sys.exit(1)
