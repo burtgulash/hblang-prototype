@@ -5,7 +5,7 @@ import re
 
 
 def right_associative(x):
-    return x and x in "$:"
+    return x and x in ":$@"
 
 
 def parens_match(left, right):
@@ -46,12 +46,12 @@ class Leaf:
 
     def __repr__(self):
         if self.tt == TT.FUNCTION:
-            return f"{{{self.w}}}"
+            return "{" + str(self.w) + "}"
         if self.tt == TT.CLOSURE:
-            return f"{{{self.w[1]}}}"
+            return str(self.w[1])
         if self.tt == TT.THUNK:
             return f"[{self.w}]"
-        if self.tt in (TT.PUNCTUATION, TT.NUM,
+        if self.tt in (TT.PUNCTUATION, TT.NUM, TT.CONS,
                        TT.SYMBOL, TT.STRING, TT.SEPARATOR):
             return str(self.w)
         return f"({self.w})"
@@ -76,7 +76,7 @@ class Tree:
             return f"{n.L} |({n.R})"
         if n.H.tt == TT.SYMBOL:
             return f"({n.L} {n.H} {n.R})"
-        if n.H.tt == TT.PUNCTUATION:
+        if n.H.tt in (TT.PUNCTUATION, TT.CONS):
             if isinstance(n.H, Leaf) and right_associative(n.H.w):
                 return f" ({n.L}{n.H}{n.R})"
             return f"({n.L} {n.H}{n.R})"
@@ -107,6 +107,7 @@ class TT(Enum):
     SPECIAL = 18
     TREE = 19
     OBJECT = 20
+    CONS = 21
 
     def __str__(self):
         return self.name
@@ -175,7 +176,8 @@ def lex_(text):
         (TT.SYMBOL, identity, "[a-zA-Z][a-zA-Z0-9_]*"),
         (TT.STRING, string, r'"(\\.|[^"])*"'),
         (TT.COMMENT, comment, "#.*\n"),
-        (TT.PUNCTUATION, identity, "[!$%&*+,-./:;<=>?@\\^`~]"),
+        (TT.CONS, identity, "[:.]"),
+        (TT.PUNCTUATION, identity, "[-$@&!%*+,;?=<>/\\^`~]+"),
         (TT.SEPARATOR, identity, "[|]"),
         (TT.NEWLINE, identity, "[\n\r]+"),
         (TT.SPACE, identity, "[ \t]+"),

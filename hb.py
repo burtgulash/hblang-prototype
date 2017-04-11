@@ -9,6 +9,7 @@ from c import Lex, Parse, \
 from stack import Cactus, CT, Frame
 
 
+SELF_F = "f"
 DISPATCH_SEP = ":"
 
 class NoDispatch(Exception):
@@ -83,7 +84,7 @@ def shift(a, b, env, cstack):
 
 
 def setenv(H, env):
-    self_f = env.lookup("self", None)
+    self_f = env.lookup(SELF_F, None)
     if self_f is H:
         return env
     return Env(env)
@@ -102,6 +103,21 @@ def unwrap(H):
         return H.w
     return H
 
+
+def bake_vars(a, _, env):
+    assert a.tt == TT.FUNCTION
+    return Leaf(a.tt, bake_vars_(unwrap(a)))
+
+def bake_vars_(x):
+    if isinstance(x, Tree):
+        L, R = bake_vars_(x.L), bake_vars_(x.R)
+        x = Tree(L, x.H, R)
+    elif x.tt == TT.THUNK:
+        x = Leaf(x.tt, bake_vars_(unwrap(x)))
+    elif x.tt == TT.SYMBOL:
+        x = Tree(Leaf(TT.CONS, "."), Leaf(TT.PUNCTUATION, "$"), x)
+    return x
+    
 
 # def bake(a, _, env):
 #     assert a.tt == TT.FUNCTION
@@ -162,7 +178,7 @@ def invoke(a, b, env):
 
 
 def if_(a, b, env):
-    assert a.tt == TT.PUNCTUATION and isinstance(a, Tree)
+    assert a.tt == TT.CONS and isinstance(a, Tree)
     conseq = a.R if b.w == 0 else a.L
     if conseq.tt in (TT.FUNCTION, TT.THUNK):
         conseq = conseq.w
@@ -207,6 +223,15 @@ def new_object(a, b, env):
     return Leaf(TT.OBJECT, Env(None))
 
 
+def at(a, b, env):
+    e = a.w
+    if e == ".":
+        return env.lookup(b.w, None)
+    assert False
+    e = env.lookup(e, None).w # un-object
+    return e.lookup(b.w, None)
+
+
 BUILTINS = {
     "+": lambda a, b, env: Leaf(TT.NUM, a.w + b.w),
     "-": lambda a, b, env: Leaf(TT.NUM, a.w - b.w),
@@ -219,17 +244,18 @@ BUILTINS = {
     "type": get_type,
     "sametype": lambda a, b, env: Leaf(TT.NUM, 1 if a.tt == b.tt else 0),
     "dispatch": set_dispatch,
-    "<": le,
-    ">": ge,
-    "le": le,
-    "ge": ge,
-    "lt": lambda a, b, env: Leaf(TT.NUM, 1 if a.w <= b.w else 0),
-    "gt": lambda a, b, env: Leaf(TT.NUM, 1 if a.w >= b.w else 0),
+    "<": lambda a, b, env: Leaf(TT.NUM, 1 if a.w < b.w else 0),
+    "<=": lambda a, b, env: Leaf(TT.NUM, 1 if a.w <= b.w else 0),
+    ">": lambda a, b, env: Leaf(TT.NUM, 1 if a.w > b.w else 0),
+    ">=": lambda a, b, env: Leaf(TT.NUM, 1 if a.w >= b.w else 0),
+    "@": at,
     "$": lambda a, b, env: env.lookup(b.w, a),
     "to": lambda a, b, env: Leaf("vec", list(range(a.w, b.w))),
     "as": lambda a, b, env: env.bind(b.w, a),
+    "->": lambda a, b, env: env.bind(b.w, a),
     "assign": lambda a, b, env: env.assign(b.w, a),
     "is": lambda a, b, env: env.assign(a.w, b),
+    "<-": lambda a, b, env: env.assign(a.w, b),
     "if": lambda a, b, env: unwrap(a.L),
     # "then": lambda a, b, env: if_(b, a, env),
     "not": lambda a, b, env: Leaf(TT.NUM, 1 - a.w),
@@ -249,6 +275,7 @@ BUILTINS = {
     "load": load,
     "O": new_object(Void, Void, None),
     "object": new_object(Void, Void, None),
+    "bakevars": bake_vars,
 }
 
 
@@ -332,7 +359,7 @@ def Eval(x, env):
                 # cstack.push(Frame(CT.Delim, L, H, R, env))
                 cstack.scopy(cc)
                 x, ins = L, next_ins(L)
-            elif H.tt == TT.PUNCTUATION and H.w in ".:`":
+            elif H.tt == TT.CONS and H.w in ".:":
                 x = Tree(L, H, R)
             elif H.tt == TT.BUILTIN:
                 x = H.w(L, R, env)
@@ -349,7 +376,7 @@ def Eval(x, env):
             elif H.tt == TT.FUNCTION:
                 # Tail optimize cstack and env if the last frame would
                 # be effectively the same as the new one
-                self_h = env.lookup("self", None)
+                self_h = env.lookup(SELF_F, None)
                 last_frame = cstack.peek()
                 if (last_frame and last_frame.ct != CT.Function) \
                     or self_h is not H:
@@ -358,7 +385,7 @@ def Eval(x, env):
                 # print(TT.OBJECT, id(env))
 
                 env.bind("x", L)
-                env.bind("self", H)
+                env.bind(SELF_F, H)
                 env.bind("y", R)
                 x = unwrap(H)
                 ins = next_ins(x)
@@ -375,32 +402,34 @@ def Eval(x, env):
                 H = op
                 ins = CT.Right
                 continue
-            elif H.tt in (TT.PUNCTUATION, TT.SYMBOL,
+            elif H.tt in (TT.PUNCTUATION, TT.CONS, TT.SYMBOL,
                           TT.STRING, TT.SEPARATOR):
-                # separator as fallback if no TCO? TODO remove it
                 fn = H.w
-                op = env.lookup(fn, None)
-                if op is None:
-                    # Dispatch on left symbol (like a method)
-                    dispatch_env = env.lookup(L.tt, None)
-                    if dispatch_env and dispatch_env.tt == TT.OBJECT:
-                        dispatch_env = dispatch_env.w
-                    else:
-                        dispatch_env = env
+                op = None
 
-                    if R.tt in (TT.PUNCTUATION, TT.SYMBOL,
-                                TT.STRING, TT.NUM):
-                        # dispatch on l.type and r.value
-                        dispatch_str = f"{fn}:{R.w}"
-                        op = dispatch_env.lookup(dispatch_str, None)
-                    if op is None:
-                        # Dispatch on L.type and R.type
-                        dispatch_str = f"{fn}:{R.tt}"
-                        op = dispatch_env.lookup(dispatch_str, None)
-                    if op is None:
-                        # Dispatch on L.type and Fn name
-                        dispatch_str = f"{fn}"
-                        op = dispatch_env.lookup(dispatch_str, None)
+                # separator as fallback if no TCO? TODO remove it
+                # Dispatch on left symbol (like a method)
+                dispatch_env = env.lookup(L.tt, None)
+                if dispatch_env and dispatch_env.tt == TT.OBJECT:
+                    dispatch_env = dispatch_env.w
+                else:
+                    dispatch_env = env
+
+                if R.tt in (TT.PUNCTUATION, TT.CONS, TT.SYMBOL,
+                            TT.STRING, TT.NUM):
+                    # dispatch on l.type and r.value
+                    dispatch_str = f"{fn}:{R.w}"
+                    op = dispatch_env.lookup(dispatch_str, None)
+                if op is None:
+                    # Dispatch on L.type and R.type
+                    dispatch_str = f"{fn}:{R.tt}"
+                    op = dispatch_env.lookup(dispatch_str, None)
+                if op is None:
+                    # Dispatch on L.type and Fn name
+                    dispatch_str = f"{fn}"
+                    op = dispatch_env.lookup(dispatch_str, None)
+                if op is None:
+                    op = env.lookup(fn, None)
                 if op is None:
                     raise NoDispatch(f"Can't dispatch {fn} on L: {L.tt}")
                 assert op.tt in (TT.CONTINUATION, TT.SPECIAL,
