@@ -105,14 +105,15 @@ def unwrap(H):
 
 
 def bake_vars(a, _, env):
-    assert a.tt == TT.FUNCTION
+    assert a.tt in (TT.FUNCTION, TT.THUNK, TT.CLOSURE)
     return Leaf(a.tt, bake_vars_(unwrap(a)))
+
 
 def bake_vars_(x):
     if isinstance(x, Tree):
-        L, R = bake_vars_(x.L), bake_vars_(x.R)
-        x = Tree(L, x.H, R)
-    elif x.tt == TT.THUNK:
+        L, H, R = bake_vars_(x.L), bake_vars_(x.H), bake_vars_(x.R)
+        x = Tree(L, H, R)
+    elif x.tt in (TT.FUNCTION, TT.THUNK, TT.CLOSURE):
         x = Leaf(x.tt, bake_vars_(unwrap(x)))
     elif x.tt == TT.SYMBOL:
         x = Tree(Leaf(TT.CONS, "."), Leaf(TT.PUNCTUATION, "$"), x)
@@ -434,7 +435,7 @@ def Eval(x, env):
                     raise NoDispatch(f"Can't dispatch {fn} on L: {L.tt}")
                 assert op.tt in (TT.CONTINUATION, TT.SPECIAL,
                                  TT.FUNCTION, TT.CLOSURE,
-                                 TT.BUILTIN, TT.THUNK)
+                                 TT.BUILTIN, TT.THUNK, TT.SYMBOL)
                 H = op
                 ins = CT.Right
                 continue
