@@ -23,8 +23,9 @@ class CantReduce(Exception):
 class Env:
 
     def __init__(self, parent, from_dict=None):
-        self.parent = parent
+        # self.parent = parent
         self.e = {**(from_dict or {})}
+        self.e[":"] = parent
 
     def lookup(self, name, or_else):
         env = self.find_env(name)
@@ -36,8 +37,10 @@ class Env:
         # TODO optimize self-recursion in tail calls by reusing env
         if name in self.e:
             return self
-        elif self.parent is not None:
-            return self.parent.find_env(name)
+        else:
+            parent = self.e.get(":")
+            if parent:
+                return parent.find_env(name)
         return None
 
     def bind(self, name, value):
@@ -226,12 +229,27 @@ def new_object(a, b, env):
 
 
 def at(a, b, env):
-    e = a.w
-    if e == ".":
-        return env.lookup(b.w, None)
-    assert False
-    e = env.lookup(e, None).w # un-object
-    return e.lookup(b.w, None)
+    env_name = a.w
+    if env_name == ".":
+        e = env
+    elif env_name == ":":
+        e = env.lookup(":", None) # TODO check if some focka didn't delete it
+    else:
+        e = env.lookup(env_name, None)
+        assert e.tt == TT.OBJECT
+        e = e.w # unwrap object to env
+
+    # print(e.e)
+    if isinstance(b, Tree):
+        slot_name = b.L.w
+        item = b.R
+        e.bind(slot_name, item)
+    else:
+        slot_name = b.w
+        item = e.lookup(slot_name, None)
+        assert isinstance(item, Leaf) or isinstance(item, Tree)
+
+    return item
 
 
 BUILTINS = {
@@ -239,6 +257,7 @@ BUILTINS = {
     "-": lambda a, b, env: Leaf(TT.NUM, a.w - b.w),
     "*": lambda a, b, env: Leaf(TT.NUM, a.w * b.w),
     "/": lambda a, b, env: Leaf(TT.NUM, a.w // b.w),
+    "mod": lambda a, b, env: Leaf(TT.NUM, a.w % b.w),
     "=": lambda a, b, env: Leaf(TT.NUM, 1 if a.w == b.w else 0),
     "dec": lambda a, b, env: env.assign(a.w, Leaf(TT.NUM, env.lookup(a.w, Leaf(TT.NUM, 1)).w - b.w)),
     "inc": lambda a, b, env: env.assign(a.w, Leaf(TT.NUM, env.lookup(a.w, Leaf(TT.NUM, 0)).w + b.w)),
@@ -599,7 +618,7 @@ def prepare_env():
         **builtins,
         **special,
     })
-    env = Env(env)  # dummy env
+    # env = Env(env)  # dummy env
     return env
 
 
