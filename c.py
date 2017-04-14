@@ -2,6 +2,7 @@
 
 from enum import Enum
 import re
+import itertools
 
 
 def right_associative(x):
@@ -198,30 +199,27 @@ def lex_(text):
         yield Leaf(tt, tok, debug=DebugInfo(span[0], span[1]))
 
 
-def Lex(text):
-    # add extra newline at the end as a sentinel for comments
-    toks = list(lex_(text + "\n"))
-
-    # Remove the \n sentinel if it wasn't used by comment
-    if toks[-1].tt == TT.NEWLINE:
-        toks = toks[:-1]
-
-    # Add EOF token
-    toks += [EOF]
-
+def add_debug_info(toks):
     lines = 0
     for tok in toks:
         if tok.tt in (TT.COMMENT, TT.NEWLINE):
             lines += 1
         if tok.debug is not None:
             tok.debug.lineno = lines
+        yield tok
 
-    # print("TOK", [(x, x.debug) for x in toks])
+
+def Lex(text):
+    # add extra newline at the end as a sentinel for comments
+    toks = lex_(text + "\n")
+    toks = add_debug_info(toks)
 
     # Remove insignificant tokens - spaces and comments
-    toks = [tok for tok in toks
-            if tok.tt not in (TT.SPACE, TT.COMMENT, TT.NEWLINE)]
-    return toks
+    toks = (tok for tok in toks
+            if tok.tt not in (TT.SPACE, TT.COMMENT, TT.NEWLINE))
+
+    yield from toks
+    yield EOF
 
 
 def Parse(toks):
