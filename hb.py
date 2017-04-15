@@ -112,19 +112,23 @@ def bake_vars(a, _, env):
     return Leaf(a.tt, bake_vars_(unwrap(a)))
 
 
+def is_function(x):
+    return x.tt in (TT.FUNCTION, TT.THUNK, TT.CLOSURE)
+
+
 def bake_vars_(x):
     if isinstance(x, Tree):
         L, R = bake_vars_(x.L), bake_vars_(x.R)
         H = x.H
-        if isinstance(H, Tree):
-            H = bake_vars(H)
+        if isinstance(H, Tree) or is_function(H):
+            H = bake_vars_(H)
         x = Tree(L, H, R)
-    elif x.tt in (TT.FUNCTION, TT.THUNK, TT.CLOSURE):
+    elif is_function(x):
         x = Leaf(x.tt, bake_vars_(unwrap(x)))
     elif x.tt == TT.SYMBOL:
         x = Tree(Leaf(TT.CONS, "."), Leaf(TT.PUNCTUATION, "$"), x)
     return x
-    
+
 
 # def bake(a, _, env):
 #     assert a.tt == TT.FUNCTION
