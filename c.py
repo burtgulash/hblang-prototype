@@ -291,20 +291,20 @@ def RParse(stream):
             raise ParseError(f"Invalid expression. R can't be END token: '{R}'")
 
         rights.append(R)
-        Y = stream.next()
+        H = stream.next()
 
-        if not right_associative(Y.w):
-            stream.push(Y)
+        if not right_associative(H.w):
+            stream.push(H)
             break
 
-        rights.append(Y)
+        rights.append(H)
 
     # Reduce right stack to one final tree node
     while len(rights) > 1:
         R = rights.pop()
-        Y = rights.pop()
+        H = rights.pop()
         L = rights.pop()
-        rights.append(Tree(L, Y, R))
+        rights.append(Tree(L, H, R))
 
     assert len(rights) == 1
     return rights.pop()
@@ -322,19 +322,17 @@ def LParse(stream, expected_end):
     while True:
         # Handle H
         H = ParenParse(stream)
-        if H.tt == TT.SEPARATOR:
-            # Expression is separated by |
-            R = LParse(stream, expected_end)
-            # stream.push(Tree(L, H, R))
-            return Tree(L, H, R)
-
         if end_of_expr(H):
             # End of expression
             if not end_matches(H, expected_end):
                 raise ParseError(f"Parentheses don't match."
                                  f"Expected {expected_end}, got {H.w}")
-            # stream.push(L)
             return L
+
+        if H.tt == TT.SEPARATOR:
+            # Expression is separated by |
+            R = LParse(stream, expected_end)
+            return Tree(L, H, R)
 
         # Parse right token, which could be right leaning
         R = RParse(stream)
