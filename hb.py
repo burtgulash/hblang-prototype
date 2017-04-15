@@ -257,11 +257,6 @@ def at(a, b, env):
 
 
 BUILTINS = {
-    "+": lambda a, b, env: Leaf(TT.NUM, a.w + b.w),
-    "-": lambda a, b, env: Leaf(TT.NUM, a.w - b.w),
-    "*": lambda a, b, env: Leaf(TT.NUM, a.w * b.w),
-    "/": lambda a, b, env: Leaf(TT.NUM, a.w // b.w),
-    "mod": lambda a, b, env: Leaf(TT.NUM, a.w % b.w),
     "=": lambda a, b, env: Leaf(TT.NUM, 1 if a.w == b.w else 0),
     "dec": lambda a, b, env: env.assign(a.w, Leaf(TT.NUM, env.lookup(a.w, Leaf(TT.NUM, 1)).w - b.w)),
     "inc": lambda a, b, env: env.assign(a.w, Leaf(TT.NUM, env.lookup(a.w, Leaf(TT.NUM, 0)).w + b.w)),
@@ -269,10 +264,6 @@ BUILTINS = {
     "type": get_type,
     "sametype": lambda a, b, env: Leaf(TT.NUM, 1 if a.tt == b.tt else 0),
     "dispatch": set_dispatch,
-    "<": lambda a, b, env: Leaf(TT.NUM, 1 if a.w < b.w else 0),
-    "<=": lambda a, b, env: Leaf(TT.NUM, 1 if a.w <= b.w else 0),
-    ">": lambda a, b, env: Leaf(TT.NUM, 1 if a.w > b.w else 0),
-    ">=": lambda a, b, env: Leaf(TT.NUM, 1 if a.w >= b.w else 0),
     "@": at,
     "$": lambda a, b, env: env.lookup(b.w, a),
     "to": lambda a, b, env: Leaf("vec", list(range(a.w, b.w))),
@@ -287,9 +278,6 @@ BUILTINS = {
     "?": lambda a, b, env: if_(b, a, env),
     "|": lambda a, b, env: b,
     "bake": bake,
-    "L": lambda a, _, env: a.L,
-    "H": lambda a, _, env: a.H,
-    "R": lambda a, _, env: a.R,
     "open": lambda a, _, env: unwrap(a),
     "unwrap": lambda a, _, env: unwrap(a),
     ",": app,
@@ -457,7 +445,7 @@ def Eval(x, env):
                 if op is None:
                     op = env.lookup(fn, None)
                 if op is None:
-                    raise NoDispatch(f"Can't dispatch {fn} on L: {L.tt}")
+                    raise NoDispatch(f"Can't dispatch {fn} on {L.tt}:{R.tt}")
                 assert op.tt in (TT.CONTINUATION, TT.SPECIAL,
                                  TT.FUNCTION, TT.CLOSURE,
                                  TT.BUILTIN, TT.THUNK, TT.SYMBOL)
@@ -578,11 +566,25 @@ modules = {
     },
     TT.TREE: {
         "if": if_,
+        "L": lambda a, _, env: a.L,
+        "H": lambda a, _, env: a.H,
+        "R": lambda a, _, env: a.R,
     },
     TT.OBJECT: {
         "clone": lambda a, b, env: Leaf(TT.OBJECT, a.w),
         ("@", TT.TREE): lambda a, b, env: env.bind(b.L.w, b.R) # TODO implement assignment
-    }
+    },
+    TT.NUM: {
+        ("+", TT.NUM): lambda a, b, env: Leaf(TT.NUM, a.w + b.w),
+        ("-", TT.NUM): lambda a, b, env: Leaf(TT.NUM, a.w - b.w),
+        ("*", TT.NUM): lambda a, b, env: Leaf(TT.NUM, a.w * b.w),
+        ("/", TT.NUM): lambda a, b, env: Leaf(TT.NUM, a.w // b.w),
+        ("mod", TT.NUM): lambda a, b, env: Leaf(TT.NUM, a.w % b.w),
+        ("<", TT.NUM): lambda a, b, env: Leaf(TT.NUM, 1 if a.w < b.w else 0),
+        ("<=", TT.NUM): lambda a, b, env: Leaf(TT.NUM, 1 if a.w <= b.w else 0),
+        (">", TT.NUM): lambda a, b, env: Leaf(TT.NUM, 1 if a.w > b.w else 0),
+        (">=", TT.NUM): lambda a, b, env: Leaf(TT.NUM, 1 if a.w >= b.w else 0),
+    },
 }
 
 def as_module(mod_dict):
