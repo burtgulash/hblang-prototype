@@ -2,7 +2,6 @@
 
 from enum import Enum
 import re
-import itertools
 
 
 def right_associative(x):
@@ -161,7 +160,7 @@ def unescape(s):
 
 
 def string(tok):
-    tok = tok[1:-1] # strip quotes
+    tok = tok[1:-1]  # strip quotes
     return "".join(unescape(tok))
 
 
@@ -222,13 +221,6 @@ def Lex(text):
     yield EOF
 
 
-def Parse(toks):
-    # Revert list of tokens to form a stack
-    stream = list(toks)[::-1]
-    LParse(stream, EOF)
-    return stream.pop()
-
-
 def end_of_expr(x):
     return x.tt in (TT.RPAREN, TT.END)
 
@@ -248,6 +240,7 @@ def quote(x, paren_type):
         x = Leaf(TT.FUNCTION, x)
     return x
 
+
 def opposite_paren(paren):
     return {
         "(": ")",
@@ -256,14 +249,37 @@ def opposite_paren(paren):
     }[paren]
 
 
+class Buf:
+
+    def __init__(self, stream):
+        self.stream = stream
+        self.xs = []
+
+    def next(self):
+        if self.xs:
+            return self.xs.pop()
+        return next(self.stream)
+
+    def pop(self):
+        return self.xs.pop()
+
+    def push(self, x):
+        self.xs.append(x)
+
+
+def Parse(toks):
+    stream = Buf(toks)
+    return LParse(stream, EOF)
+
+
 # Parse parenthesized subexpressions
 # TODO check parenthesis type here or in lexing?
 def ParenParse(stream):
-    x = stream.pop()
+    x = stream.next()
     if isinstance(x, Leaf) and x.tt == TT.LPAREN:
         paren_type = x.w
-        LParse(stream, opposite_paren(paren_type))
-        x = quote(stream.pop(), paren_type)
+        x = LParse(stream, opposite_paren(paren_type))
+        x = quote(x, paren_type)
     return x
 
 
@@ -271,11 +287,14 @@ def RParse(stream):
     rights = []
     while True:
         R = ParenParse(stream)
+        if isinstance(R, Leaf) and end_of_expr(R):
+            raise ParseError(f"Invalid expression. R can't be END token: '{R}'")
+
         rights.append(R)
-        Y = stream.pop()
+        Y = stream.next()
 
         if not right_associative(Y.w):
-            stream.append(Y)
+            stream.push(Y)
             break
 
         rights.append(Y)
@@ -292,41 +311,43 @@ def RParse(stream):
 
 
 def LParse(stream, expected_end):
-    while len(stream) > 1:
-        # Handle L
-        L = ParenParse(stream)
-        if isinstance(L, Leaf) and L.tt == TT.RPAREN:
-            # TODO check if they match at least
-            stream.append(Void)
-            break
+    # Handle L
+    L = ParenParse(stream)
+    if end_of_expr(L):
+        if not end_matches(L, expected_end):
+            raise ParseError(f"Parentheses don't match."
+                             f"Expected {expected_end}, got {L.w}")
+        return Void
 
+    while True:
         # Handle H
         H = ParenParse(stream)
         if H.tt == TT.SEPARATOR:
             # Expression is separated by |
-            LParse(stream, expected_end)
-            R = stream.pop()
-            stream.append(Tree(L, H, R))
-            break
+            R = LParse(stream, expected_end)
+            # stream.push(Tree(L, H, R))
+            return Tree(L, H, R)
 
         if end_of_expr(H):
             # End of expression
             if not end_matches(H, expected_end):
                 raise ParseError(f"Parentheses don't match."
                                  f"Expected {expected_end}, got {H.w}")
-            stream.append(L)
-            break
+            # stream.push(L)
+            return L
 
         # Parse right token, which could be right leaning
         R = RParse(stream)
 
         # Create new node from L, H, R gathered above
-        stream.append(Tree(L, H, R))
+        L = Tree(L, H, R)
 
 
 if __name__ == "__main__":
     import sys
-    inp = sys.stdin.read()[:-1]
+    inp = sys.stdin.read()
     print(">", inp)
-    tree = Parse(inp)
+    toks = Lex(inp)
+    # print("LEX", y)
+    tree = Parse(toks)
     print(tree)
