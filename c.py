@@ -73,7 +73,7 @@ class Tree:
         # rparen = '}' if function else ']'
         # return f"{lparen}{n.L} {n.H} {n.R}{rparen}"
         if n.H.tt == TT.SEPARATOR:
-            return f"{n.L} |({n.R})"
+            return f"{n.L}; ({n.R})"
         if n.H.tt == TT.SYMBOL:
             return f"({n.L} {n.H} {n.R})"
         if n.H.tt in (TT.PUNCTUATION, TT.CONS):
@@ -177,8 +177,8 @@ def lex_(text):
         (TT.STRING, string, r'"(\\.|[^"])*"'),
         (TT.COMMENT, comment, "#.*\n"),
         (TT.CONS, identity, "[:.]"),
-        (TT.PUNCTUATION, identity, "[-$@&!%*+,;?=<>/\\^`~]+"),
-        (TT.SEPARATOR, identity, "[|]"),
+        (TT.PUNCTUATION, identity, "[-$@&!%*+,?=<>/\\^`~|]+"),
+        (TT.SEPARATOR, identity, "[;]"),
         (TT.NEWLINE, identity, "[\n\r]+"),
         (TT.SPACE, identity, "[ \t]+"),
         (TT.LPAREN, identity, "[({[]"),

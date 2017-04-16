@@ -276,7 +276,7 @@ BUILTINS = {
     # "then": lambda a, b, env: if_(b, a, env),
     "not": lambda a, b, env: Leaf(TT.NUM, 1 - a.w),
     "?": lambda a, b, env: if_(b, a, env),
-    "|": lambda a, b, env: b,
+    ";": lambda a, b, env: b,
     "bake": bake,
     "open": lambda a, _, env: unwrap(a),
     "unwrap": lambda a, _, env: unwrap(a),
@@ -351,7 +351,7 @@ def Eval(x, env):
                 x, ins = H, next_ins(H)
                 continue
             if H.tt == TT.SEPARATOR:
-                # Tail recurse on separator '|' before R gets evaluated
+                # Tail recurse on separator ';' before R gets evaluated
                 x, ins = R, next_ins(R)
                 continue
             if ins < CT.Right and isinstance(R, Tree):
