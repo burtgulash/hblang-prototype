@@ -96,7 +96,7 @@ def setenv(H, env):
 def get_type(a, b, env):
     if isinstance(a, Tree):
         return Leaf(TT.SYMBOL, TT.TREE)
-    return Leaf(TT.SYMBOL, a.tt.name)
+    return Leaf(TT.SYMBOL, a.tt)
 
 
 def unwrap(H):
@@ -281,7 +281,7 @@ BUILTINS = {
     "open": lambda a, _, env: unwrap(a),
     "unwrap": lambda a, _, env: unwrap(a),
     ",": app,
-    "vec": lambda a, _, env: Leaf("vec", []),
+    "tovec": lambda a, _, env: Leaf("vec", []),
     "print": print_fn,
     "wait": wait,
     "!": invoke,
@@ -559,10 +559,6 @@ modules = {
         ("@", TT.NUM): lambda a, b, env: Leaf(TT.NUM, a.w[b.w]),
         "fold": fold,
         "scan": scan,
-        ("+", "0"): left,
-        ("-", "0"): left,
-        ("*", "1"): left,
-        ("/", "1"): left,
     },
     TT.TREE: {
         "if": if_,
