@@ -88,7 +88,7 @@ class Tree:
 
 class TT(Enum):
     COMMENT = 1
-    VOID = 2
+    UNIT = 2
     NUM = 3
     SYMBOL = 4
     STRING = 5
@@ -113,7 +113,7 @@ class TT(Enum):
         return self.name
 
 
-Void = Leaf(TT.VOID, "void")
+Unit = Leaf(TT.UNIT, "")
 EOF = Leaf(TT.END, "END")
 
 
@@ -317,7 +317,7 @@ def LParse(stream, expected_end):
         if not end_matches(L, expected_end):
             raise ParseError(f"Parentheses don't match."
                              f"Expected {expected_end}, got {L.w}")
-        return Void
+        return Unit
 
     while True:
         # Handle H

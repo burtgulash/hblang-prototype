@@ -4,7 +4,7 @@ import sys
 import time
 
 from c import Lex, Parse, \
-              ParseError, TT, Tree, Leaf, Void
+              ParseError, TT, Tree, Leaf, Unit
 
 from stack import Cactus, CT, Frame
 
@@ -185,7 +185,7 @@ def bake_(x, var, env):
 
 
 def invoke(a, b, env):
-    return Tree(a, b, Void)
+    return Tree(a, b, Unit)
 
 
 def if_(a, b, env):
@@ -286,8 +286,8 @@ BUILTINS = {
     "wait": wait,
     "!": invoke,
     "load": load,
-    "O": new_object(Void, Void, None),
-    "object": new_object(Void, Void, None),
+    "O": new_object(Unit, Unit, None),
+    "object": new_object(Unit, Unit, None),
     "bakevars": bake_vars,
 }
 
@@ -364,7 +364,7 @@ def Eval(x, env):
             # print("R", R, file=sys.stderr)
 
             # TODO reorder by frequency of invocation. BUILTIN to top?
-            if H.tt == TT.VOID:
+            if H.tt == TT.UNIT:
                 x = H
             elif H.tt == TT.CONTINUATION:
                 cc, env = H.w
