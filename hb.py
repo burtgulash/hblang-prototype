@@ -7,6 +7,7 @@ from c import Lex, Parse, \
               ParseError, TT, Tree, Leaf, Unit
 
 from stack import Cactus, CT, Frame
+import functors
 
 
 SELF_F = "f"
@@ -219,12 +220,19 @@ def set_dispatch(a, b, env):
     fn_name = b.L.w
     if isinstance(b.R, Tree):
         left_tt, right_tt = b.R.L.w, b.R.R.w
-        dispatch_str = f"{fn_name}{DISPATCH_SEP}{left_tt}{DISPATCH_SEP}{right_tt}"
+        dispatch_str = f"{fn_name}{DISPATCH_SEP}{right_tt}"
     else:
         left_tt = b.R.w
-        dispatch_str = f"{fn_name}{DISPATCH_SEP}{left_tt}"
+        dispatch_str = f"{fn_name}"
 
-    env.bind(dispatch_str, a)
+    module = env.lookup(left_tt, None)
+    if not module:
+        # TODO create new module
+        raise Exception("Accompanying module of type '{left_tt}' doesn't exist")
+    if module.tt != TT.OBJECT:
+        raise Exception("Accompanying object is not a module, but {module.tt}")
+
+    module.w.bind(dispatch_str, a)
     return a
 
 
@@ -328,7 +336,7 @@ def next_ins(x):
         return CT.Leaf
     elif isinstance(x, Tree):
         return CT.Tree
-    assert False
+    raise AssertionError(f"Result needs to be either Leaf or Tree. Got '{type(x)}'")
 
 
 def Eval(x, env):
@@ -350,6 +358,7 @@ def Eval(x, env):
                 cstack.push(Frame(CT.Head, L, H, R, env))
                 x, ins = H, next_ins(H)
                 continue
+            # print("H", type(H), H)
             if H.tt == TT.SEPARATOR:
                 # Tail recurse on separator ';' before R gets evaluated
                 x, ins = R, next_ins(R)
@@ -415,6 +424,20 @@ def Eval(x, env):
                 H = op
                 ins = CT.Right
                 continue
+            elif H.tt == TT.OBJECT:
+                # If module given for dispatch,
+                # lookup a constructor "." function on it.
+                # "." reserved for constructors
+                # because it can't be overriden in the module
+                constructor = H.w.lookup(".", None)
+                if not constructor:
+                    raise AssertionError("Constructor not found")
+                H = constructor
+                assert H.tt in (TT.CONTINUATION, TT.SPECIAL,
+                                TT.FUNCTION, TT.CLOSURE,
+                                TT.BUILTIN, TT.THUNK, TT.SYMBOL)
+                ins = CT.Right
+                continue
             elif H.tt in (TT.PUNCTUATION, TT.CONS, TT.SYMBOL,
                           TT.STRING, TT.SEPARATOR):
                 fn = H.w
@@ -423,11 +446,15 @@ def Eval(x, env):
                 # separator as fallback if no TCO? TODO remove it
                 # Dispatch on left symbol (like a method)
                 dispatch_env = env.lookup(L.tt, None)
+                # print("DENV", L.tt, dispatch_env, file=sys.stderr)
                 if dispatch_env and dispatch_env.tt == TT.OBJECT:
                     dispatch_env = dispatch_env.w
                 else:
                     dispatch_env = env
 
+                print("DISPATCH ON", L.tt, fn, R.tt, file=sys.stderr)
+                print("DISPTACH ENV", dispatch_env, file=sys.stderr)
+                print("", file=sys.stderr)
                 # TODO don't dispatch on value
                 # if R.tt in (TT.PUNCTUATION, TT.CONS, TT.SYMBOL,
                 #             TT.STRING, TT.NUM):
@@ -448,7 +475,9 @@ def Eval(x, env):
                     raise NoDispatch(f"Can't dispatch {fn} on {L.tt}:{R.tt}")
                 assert op.tt in (TT.CONTINUATION, TT.SPECIAL,
                                  TT.FUNCTION, TT.CLOSURE,
-                                 TT.BUILTIN, TT.THUNK, TT.SYMBOL)
+                                 TT.BUILTIN, TT.THUNK, TT.SYMBOL,
+                                 TT.OBJECT # dispatch on module/object -> find constructor
+                )
                 H = op
                 ins = CT.Right
                 continue
@@ -581,6 +610,9 @@ modules = {
         (">", TT.NUM): lambda a, b, env: Leaf(TT.NUM, 1 if a.w > b.w else 0),
         (">=", TT.NUM): lambda a, b, env: Leaf(TT.NUM, 1 if a.w >= b.w else 0),
     },
+    TT.FUNCTION: {
+        ("dispatch", TT.TREE): lambda a, b, env: set_dispatch(a, b, env),
+    }
 }
 
 def as_module(mod_dict):
@@ -610,11 +642,23 @@ def Execute(code, env):
 
 
 def prepare_env():
-    builtins = {k: Leaf(TT.BUILTIN, x) for k, x in BUILTINS.items()}
+    builtins = {k: Leaf(TT.BUILTIN, x)
+                for k, x
+                in {
+                    **BUILTINS,
+                    **functors.builtins,
+                }.items()}
     special = {k: Leaf(TT.SPECIAL, x) for k, x in SPECIAL.items()}
     # dispatches = {DISPATCH_SEP.join(map(str, k)): Leaf(TT.BUILTIN, v) for k, v in dispatch.items()}
-    mods = {k: Leaf(TT.OBJECT, Env(None, from_dict=as_module(mod))) for k, mod in modules.items()}
+    mods = {k: Leaf(TT.OBJECT, Env(None, from_dict=as_module(mod)))
+            for k, mod
+            in {
+                **modules,
+                **functors.modules,
+            }.items()}
 
+
+    # TODO prevent constructor and module clashes
     env = Env(None, from_dict={
         **mods,
         **builtins,
