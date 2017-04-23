@@ -47,8 +47,8 @@ class Leaf:
     def __repr__(self):
         if self.tt == TT.FUNCTION:
             return "{" + str(self.w) + "}"
-        if self.tt == TT.CLOSURE:
-            return str(self.w[1])
+        if self.tt == TT.FUNCTION_STUB:
+            return str(self.w)
         if self.tt == TT.THUNK:
             return f"[{self.w}]"
         if self.tt in (TT.PUNCTUATION, TT.NUM, TT.CONS,
@@ -73,7 +73,7 @@ class Tree:
         # rparen = '}' if function else ']'
         # return f"{lparen}{n.L} {n.H} {n.R}{rparen}"
         if n.H.tt == TT.SEPARATOR:
-            return f"{n.L}; ({n.R})"
+            return f"{n.L} | ({n.R})"
         if n.H.tt == TT.SYMBOL:
             return f"({n.L} {n.H} {n.R})"
         if n.H.tt in (TT.PUNCTUATION, TT.CONS):
@@ -101,7 +101,7 @@ class TT(Enum):
     FUNCTION = 12
     BUILTIN = 13
     END = 14
-    CLOSURE = 15
+    FUNCTION_STUB = 15
     NEWLINE = 16
     CONTINUATION = 17
     SPECIAL = 18
@@ -177,8 +177,8 @@ def lex_(text):
         (TT.STRING, string, r'"(\\.|[^"])*"'),
         (TT.COMMENT, comment, "#.*\n"),
         (TT.CONS, identity, "[:.]"),
-        (TT.PUNCTUATION, identity, "[-$@&!%*+,?=<>/\\^`~|]+"),
-        (TT.SEPARATOR, identity, "[;]"),
+        (TT.PUNCTUATION, identity, "[-$@&!%*+,?=<>/\\^`~;]+"),
+        (TT.SEPARATOR, identity, "[|]"),
         (TT.NEWLINE, identity, "[\n\r]+"),
         (TT.SPACE, identity, "[ \t]+"),
         (TT.LPAREN, identity, "[({[]"),
@@ -237,7 +237,7 @@ def quote(x, paren_type):
     if paren_type == '[':
         x = Leaf(TT.THUNK, x)
     elif paren_type == '{':
-        x = Leaf(TT.FUNCTION, x)
+        x = Leaf(TT.FUNCTION_STUB, x)
     return x
 
 

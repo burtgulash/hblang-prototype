@@ -57,6 +57,39 @@ class Env:
         return repr(self.e)
 
 
+class Function:
+
+    def __init__(self, left_name, right_name, body, env):
+        self.left_name = left_name
+        self.right_name = right_name
+        self.body = body
+        self.env = env
+
+    def __str__(self):
+        return "{" + f"{self.left_name, self.right_name} -> {self.body}" + "}"
+
+    @property
+    def tt(self):
+        # TODO ins accepts only Leafs and Trees, not Functions. Remove this?
+        return TT.FUNCTION
+
+
+def makefunc(a, b, env):
+    assert a.tt in (TT.FUNCTION_STUB, TT.THUNK)
+    body = a.w
+
+    left_name, right_name = "x", "y"
+    if body.tt == TT.TREE and body.H.tt == TT.SEPARATOR:
+        header = body.L
+        if header.tt == TT.TREE:
+            left_name, right_name = header.L, header.R
+            if not (left_name.tt == right_name.tt == TT.SYMBOL):
+                raise Exception(f"Function parameter names need to by symbols."
+                                f" Given '{left_name.tt}' : '{right_name.tt}'")
+            left_name, right_name = left_name.w, right_name.w
+            body = body.R
+
+    return Leaf(TT.FUNCTION, Function(left_name, right_name, body, env))
 
 
 def load(a, b, env):
@@ -101,20 +134,18 @@ def get_type(a, b, env):
 
 
 def unwrap(H):
-    if H.tt == TT.CLOSURE:
-        return H.w[1]
     if H.tt in (TT.FUNCTION, TT.THUNK):
         return H.w
     return H
 
 
 def bake_vars(a, _, env):
-    assert a.tt in (TT.FUNCTION, TT.THUNK, TT.CLOSURE)
+    assert a.tt in (TT.FUNCTION, TT.THUNK)
     return Leaf(a.tt, bake_vars_(unwrap(a)))
 
 
 def is_function(x):
-    return x.tt in (TT.FUNCTION, TT.THUNK, TT.CLOSURE)
+    return x.tt in (TT.FUNCTION, TT.THUNK)
 
 
 def bake_vars_(x):
@@ -297,6 +328,7 @@ BUILTINS = {
     "O": new_object(Unit, Unit, None),
     "object": new_object(Unit, Unit, None),
     "bakevars": bake_vars,
+    "func": makefunc,
 }
 
 
@@ -395,31 +427,41 @@ def Eval(x, env):
                 x = unwrap(H)
                 ins = next_ins(x)
                 continue
+            elif H.tt == TT.FUNCTION_STUB:
+                H = Tree(unwrap(H), Leaf(TT.BUILTIN, makefunc), Leaf(TT.PUNCTUATION, "."))
+                ins = CT.Left
+                continue
             elif H.tt == TT.FUNCTION:
+                func = H.w
+
                 # Tail optimize cstack and env if the last frame would
                 # be effectively the same as the new one
                 self_h = env.lookup(SELF_F, None)
                 last_frame = cstack.peek()
                 if (last_frame and last_frame.ct != CT.Function) \
                     or self_h is not H:
+                    # TODO compare self_h == H or self_h.func == func?
                     cstack.push(Frame(CT.Function, L, H, R, env))
+
+                    # Set up func's original env -> lexical scoping
+                    env = func.env
                     env = Env(env)
                 # print(TT.OBJECT, id(env))
 
-                env.bind("x", L)
+                env.bind(func.left_name, L)
                 env.bind(SELF_F, H)
-                env.bind("y", R)
-                x = unwrap(H)
+                env.bind(func.right_name, R)
+                x = func.body
                 ins = next_ins(x)
                 continue
-            elif H.tt == TT.TREE:
+            elif H.tt == TT.TREE and H.H.tt == TT.CONS:
                 path, fn = tree2env(H, env)
                 fn_env = path2env(path, env)
                 op = fn_env.lookup(fn, None)
                 if op is None:
                     raise NoDispatch(f"Can't find module function {H} on L: {L.tt}")
                 assert op.tt in (TT.CONTINUATION, TT.SPECIAL,
-                                 TT.FUNCTION, TT.CLOSURE,
+                                 TT.FUNCTION, # TT.CLOSURE,
                                  TT.BUILTIN, TT.THUNK)
                 H = op
                 ins = CT.Right
@@ -434,7 +476,7 @@ def Eval(x, env):
                     raise AssertionError("Constructor not found")
                 H = constructor
                 assert H.tt in (TT.CONTINUATION, TT.SPECIAL,
-                                TT.FUNCTION, TT.CLOSURE,
+                                TT.FUNCTION, # TT.CLOSURE,
                                 TT.BUILTIN, TT.THUNK, TT.SYMBOL)
                 ins = CT.Right
                 continue
@@ -473,25 +515,26 @@ def Eval(x, env):
                     op = env.lookup(fn, None)
                 if op is None:
                     raise NoDispatch(f"Can't dispatch {fn} on {L.tt}:{R.tt}")
+                print("LOOKUPED", op, type(op), op.tt, file=sys.stderr)
                 assert op.tt in (TT.CONTINUATION, TT.SPECIAL,
-                                 TT.FUNCTION, TT.CLOSURE,
+                                 TT.FUNCTION, TT.FUNCTION_STUB, # TT.CLOSURE,
                                  TT.BUILTIN, TT.THUNK, TT.SYMBOL,
                                  TT.OBJECT # dispatch on module/object -> find constructor
                 )
                 H = op
                 ins = CT.Right
                 continue
-            elif H.tt == TT.CLOSURE:
-                cstack.push(Frame(CT.Function, L, H, R, env))
-                env, H = H.w
-                ins = CT.Right
-                continue
+            #elif H.tt == TT.CLOSURE:
+            #    cstack.push(Frame(CT.Function, L, H, R, env))
+            #    env, H = H.w
+            #    ins = CT.Right
+            #    continue
             else:
                 raise CantReduce(f"Can't reduce node: {H} of {H.tt}")
-
-        # Capture current environment and close over it
-        if isinstance(x, Leaf) and x.tt == TT.FUNCTION:
-            x = Leaf(TT.CLOSURE, (env, x))
+#
+#         # Capture current environment and close over it
+#         if isinstance(x, Leaf) and x.tt == TT.FUNCTION:
+#             x = Leaf(TT.CLOSURE, (env, x))
 
         # Restore stack frame and apply continuation
         c = cstack.pop()
