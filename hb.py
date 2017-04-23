@@ -297,6 +297,27 @@ def at(a, b, env):
     return item
 
 
+class TypecheckError(Exception):
+    pass
+
+
+def nominal_typecheck(checked_type, expected_type):
+    if str(checked_type) != str(expected_type):
+        raise TypecheckError(f"Typecheck failed. '{a.tt}' doesn't match expected '{b.w}'")
+
+def typecheck(a, b, env):
+    if b.tt == TT.SYMBOL:
+        nominal_typecheck(a.tt, b.w)
+    elif b.tt == TT.TREE:
+        expected_type = b.L.w
+        nominal_typecheck(a.tt, expected_type)
+        # check_fn = env.lookup(expected_type, Env(None)).lookup("typecheck", None)
+        # TODO implement this in code
+    else:
+        raise Exception(f"Type check needs to be on a symbol or a tree. Got '{b.tt}'")
+    return a
+
+
 BUILTINS = {
     "=": lambda a, b, env: Leaf(TT.NUM, 1 if a.w == b.w else 0),
     "dec": lambda a, b, env: env.assign(a.w, Leaf(TT.NUM, env.lookup(a.w, Leaf(TT.NUM, 1)).w - b.w)),
@@ -331,6 +352,7 @@ BUILTINS = {
     "object": new_object(Unit, Unit, None),
     "bakevars": bake_vars,
     "func": makefunc,
+    "%": typecheck,
 }
 
 
@@ -717,6 +739,8 @@ def Repl(env, prompt="> "):
             x = input(prompt)
             x, _ = Execute(x, env)
             print(x)
+        except TypecheckError as err:
+            print(err, file=sys.stderr)
         except (EOFError, KeyboardInterrupt):
             break
 
