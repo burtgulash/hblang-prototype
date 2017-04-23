@@ -33,20 +33,11 @@ builtins = {
 
 modules = {
     TT.UNIT: {
-        "|": lambda a, b, env: a,
-        ">>=": lambda a, b, env: a,
-        #"=>": make_binding,
+        ">>": lambda a, b, env: a,
     },
     "Some": {
         ".": lambda a, b, env: Leaf("Some", Some(a)),
-        "|": lambda a, b, env: Tree(a.w.value, b.L, b.R),
-        ">>=": lambda a, b, env: Tree(Tree(a.w.value, Leaf(TT.PUNCTUATION, "->"), b.L), Leaf(TT.SEPARATOR, ";"), Tree(Unit, b.R, Unit)),
-        #">>=": lambda a, b, env: Parse(Lex(f"{a.w.value} -> {b.L}; () {b.R} ()"))
-        # "=>": make_binding,
+        ">>": lambda a, b, env: Tree(a.w.value, b, Unit), # TODO define this generically in some parent functor?
+        (">>", TT.TREE): lambda a, b, env: Tree(a.w.value, b.L, b.R),
     },
-#    "binding": {
-#        ("|", TT.TREE): lambda binding, b, env: binding.w.functor.w.bind_eval(binding.w.name, b.L, b.R, env),
-#        "|": lambda binding, b, env: binding.w.functor.w.bind_eval(binding.w.name, b, Unit, env),
-#        "|": lambda binding, b, env: Tree(Tree(binding.w.functor, Leaf(TT.PUNCTUATION, "|"), b)),
-#    }
 }

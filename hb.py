@@ -75,7 +75,9 @@ class Function:
 
 
 def makefunc(a, b, env):
-    assert a.tt in (TT.FUNCTION_STUB, TT.THUNK)
+    if a.tt not in (TT.FUNCTION_STUB, TT.THUNK):
+        raise Exception(f"Can't create function out of '{a.tt}'")
+
     body = a.w
 
     left_name, right_name = "x", "y"
@@ -494,15 +496,9 @@ def Eval(x, env):
                 else:
                     dispatch_env = env
 
-                print("DISPATCH ON", L.tt, fn, R.tt, file=sys.stderr)
-                print("DISPTACH ENV", dispatch_env, file=sys.stderr)
-                print("", file=sys.stderr)
-                # TODO don't dispatch on value
-                # if R.tt in (TT.PUNCTUATION, TT.CONS, TT.SYMBOL,
-                #             TT.STRING, TT.NUM):
-                #     # dispatch on l.type and r.value
-                #     dispatch_str = f"{fn}:{R.w}"
-                #     op = dispatch_env.lookup(dispatch_str, None)
+                # print("DISPATCH ON", L.tt, fn, R.tt, file=sys.stderr)
+                # print("DISPTACH ENV", dispatch_env, file=sys.stderr)
+                # print("", file=sys.stderr)
                 if op is None:
                     # Dispatch on L.type and R.type
                     dispatch_str = f"{fn}:{R.tt}"
@@ -515,7 +511,7 @@ def Eval(x, env):
                     op = env.lookup(fn, None)
                 if op is None:
                     raise NoDispatch(f"Can't dispatch {fn} on {L.tt}:{R.tt}")
-                print("LOOKUPED", op, type(op), op.tt, file=sys.stderr)
+                # print("LOOKUPED", op, type(op), op.tt, file=sys.stderr)
                 assert op.tt in (TT.CONTINUATION, TT.SPECIAL,
                                  TT.FUNCTION, TT.FUNCTION_STUB, # TT.CLOSURE,
                                  TT.BUILTIN, TT.THUNK, TT.SYMBOL,
