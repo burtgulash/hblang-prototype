@@ -48,7 +48,7 @@ class Leaf:
         if self.tt == TT.FUNCTION:
             return "{" + str(self.w) + "}"
         if self.tt == TT.FUNCTION_STUB:
-            return str(self.w)
+            return "{" + str(self.w) + "}"
         if self.tt == TT.THUNK:
             return f"[{self.w}]"
         if self.tt in (TT.PUNCTUATION, TT.NUM, TT.CONS,

@@ -65,6 +65,9 @@ class Function:
         self.body = body
         self.env = env
 
+    def clone(self, body):
+        return Function(self.left_name, self.right_name, body, self.env)
+
     def __str__(self):
         return "{" + f"{self.left_name, self.right_name} -> {self.body}" + "}"
 
@@ -72,6 +75,27 @@ class Function:
     def tt(self):
         # TODO ins accepts only Leafs and Trees, not Functions. Remove this?
         return TT.FUNCTION
+
+
+def bakevars(x, vars):
+    if isinstance(x, Tree):
+        L, R = bakevars(x.L, vars), bakevars(x.R, vars)
+        H = x.H
+        if isinstance(H, Tree):
+            H = bakevars(H, vars)
+        # if H.tt == TT.FUNCTION_STUB:
+            # TODO precompile here? or in invocation time?
+#            body = bakevars(x.w.body, vars)
+#            x = x.clone(body)
+        x = Tree(L, H, R)
+    elif x.tt == TT.THUNK:
+        x = Leaf(x.tt, bakevars(unwrap(x), vars))
+    elif x.tt == TT.FUNCTION:
+        body = bakevars(x.w.body, vars)
+        x = x.clone(body)
+    elif x.tt == TT.SYMBOL and x.w in vars:
+        x = Tree(Leaf(TT.CONS, "."), Leaf(TT.PUNCTUATION, "$"), x)
+    return x
 
 
 def makefunc(a, b, env):
@@ -91,6 +115,7 @@ def makefunc(a, b, env):
             left_name, right_name = left_name.w, right_name.w
             body = body.R
 
+    body = bakevars(body, [left_name, right_name])
     return Leaf(TT.FUNCTION, Function(left_name, right_name, body, env))
 
 
