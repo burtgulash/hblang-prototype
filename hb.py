@@ -328,7 +328,13 @@ class TypecheckError(Exception):
 
 def nominal_typecheck(checked_type, expected_type):
     if str(checked_type) != str(expected_type):
-        raise TypecheckError(f"Typecheck failed. '{a.tt}' doesn't match expected '{b.w}'")
+        raise TypecheckError(f"Typecheck failed. '{checked_type}' doesn't match expected '{expected_type}'")
+
+def not_typecheck(a, b, env):
+    if b.tt == TT.SYMBOL:
+        if str(a.tt) == str(b.w):
+            raise TypecheckError(f"Typecheck failed. '{a.tt}' musn't match forbidden '{b.w}'")
+    return a
 
 def typecheck(a, b, env):
     if b.tt == TT.SYMBOL:
@@ -343,6 +349,10 @@ def typecheck(a, b, env):
     return a
 
 
+def construct(a, b, env):
+    return Tree(a, b, Unit)
+
+
 BUILTINS = {
     "=": lambda a, b, env: Leaf(TT.NUM, 1 if a.w == b.w else 0),
     "dec": lambda a, b, env: env.assign(a.w, Leaf(TT.NUM, env.lookup(a.w, Leaf(TT.NUM, 1)).w - b.w)),
@@ -355,10 +365,8 @@ BUILTINS = {
     "$": lambda a, b, env: env.lookup(b.w, a),
     "to": lambda a, b, env: Leaf("vec", list(range(a.w, b.w))),
     "as": lambda a, b, env: env.bind(b.w, a),
-    "->": lambda a, b, env: env.bind(b.w, a),
     "assign": lambda a, b, env: env.assign(b.w, a),
     "is": lambda a, b, env: env.assign(a.w, b),
-    "<-": lambda a, b, env: env.assign(a.w, b),
     "if": lambda a, b, env: unwrap(a.L),
     # "then": lambda a, b, env: if_(b, a, env),
     "not": lambda a, b, env: Leaf(TT.NUM, 1 - a.w), # TODO doesn't play with unit ()
@@ -378,6 +386,9 @@ BUILTINS = {
     "bakevars": bake_vars,
     "func": makefunc,
     "%": typecheck,
+    "!%": not_typecheck,
+    "`": construct,
+    "id": lambda a, b, env: a,
 }
 
 
