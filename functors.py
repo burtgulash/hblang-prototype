@@ -34,6 +34,7 @@ builtins = {
 modules = {
     TT.UNIT: {
         ">>": lambda a, b, env: a,
+        "?": lambda a, b, env: unwrap(b.R),
     },
     "Some": {
         ".": lambda a, b, env: Leaf("Some", Some(a)),

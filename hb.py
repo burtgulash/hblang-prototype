@@ -336,7 +336,7 @@ BUILTINS = {
     "<-": lambda a, b, env: env.assign(a.w, b),
     "if": lambda a, b, env: unwrap(a.L),
     # "then": lambda a, b, env: if_(b, a, env),
-    "not": lambda a, b, env: Leaf(TT.NUM, 1 - a.w),
+    "not": lambda a, b, env: Leaf(TT.NUM, 1 - a.w), # TODO doesn't play with unit ()
     "?": lambda a, b, env: if_(b, a, env),
     ";": lambda a, b, env: b,
     "bake": bake,
