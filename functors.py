@@ -40,5 +40,6 @@ modules = {
         ".": lambda a, b, env: Leaf("Some", Some(a)),
         ">>": lambda a, b, env: Tree(a.w.value, b, Unit), # TODO define this generically in some parent functor?
         (">>", TT.TREE): lambda a, b, env: Tree(a.w.value, b.L, b.R),
+        # ("+>", TT.TREE): lambda a, b, env: Tree(Tree(a, Leaf(TT.PUNCTUATION, ">>"), b), Leaf(TT.SYMBOL, "Some"), Unit),
     },
 }

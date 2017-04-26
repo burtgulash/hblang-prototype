@@ -97,10 +97,10 @@ def makefunc(a, b, env):
 def load(a, b, env):
     with open(b.w) as f:
         code = f.read()
+    # print(f"CODE: '{code}'", file=sys.stderr)
 
-    new_env = Env(env)
-    x, new_env = Execute(code, new_env)
-    return Leaf(TT.OBJECT, new_env)
+    x, env = Execute(code, env)
+    return Leaf(TT.OBJECT, env)
 
 
 def reset(a, b, env, cstack):

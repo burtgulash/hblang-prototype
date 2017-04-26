@@ -177,7 +177,7 @@ def lex_(text):
         (TT.STRING, string, r'"(\\.|[^"])*"'),
         (TT.COMMENT, comment, "#.*\n"),
         (TT.CONS, identity, "[:.]"),
-        (TT.PUNCTUATION, identity, "[-$@&!%*+,?=<>/\\^`~;]+"),
+        (TT.PUNCTUATION, identity, "[-$@&!%*+,?=<>/\\^`~;~]+"),
         (TT.SEPARATOR, identity, "[|]"),
         (TT.NEWLINE, identity, "[\n\r]+"),
         (TT.SPACE, identity, "[ \t]+"),
