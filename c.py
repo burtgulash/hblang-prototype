@@ -255,6 +255,19 @@ class Buf:
         self.stream = stream
         self.xs = []
 
+    def consume(self):
+        """ For debug printing """
+        ys = []
+        try:
+            while True:
+                ys += [self.next()]
+        except StopIteration:
+            pass
+
+        for y in ys[::-1]:
+            self.push(y)
+        return ys
+
     def next(self):
         if self.xs:
             return self.xs.pop()
@@ -269,6 +282,7 @@ class Buf:
 
 def Parse(toks):
     stream = Buf(toks)
+    # import sys; print(stream.consume(), file=sys.stderr) # TODO debug print
     return LParse(stream, EOF)
 
 
