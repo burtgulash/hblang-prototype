@@ -363,7 +363,7 @@ BUILTINS = {
     "dispatch": set_dispatch,
     "@": at,
     "$": lambda a, b, env: env.lookup(b.w, a),
-    "to": lambda a, b, env: Leaf("vec", list(range(a.w, b.w))),
+    "til": lambda a, b, env: Leaf("vec", list(range(a.w, b.w))),
     "as": lambda a, b, env: env.bind(b.w, a),
     "assign": lambda a, b, env: env.assign(b.w, a),
     "is": lambda a, b, env: env.assign(a.w, b),
@@ -569,12 +569,13 @@ def Eval(x, env):
                     op = env.lookup(fn, None)
                 if op is None:
                     raise NoDispatch(f"Can't dispatch {fn} on {L.tt}:{R.tt}")
-                # print("LOOKUPED", op, type(op), op.tt, file=sys.stderr)
-                assert op.tt in (TT.CONTINUATION, TT.SPECIAL,
+                print("LOOKUPED", fn, L.tt, op, type(op), op.tt, file=sys.stderr)
+                if op.tt not in (TT.CONTINUATION, TT.SPECIAL,
                                  TT.FUNCTION, TT.FUNCTION_STUB, # TT.CLOSURE,
-                                 TT.BUILTIN, TT.THUNK, TT.SYMBOL,
+                                 TT.BUILTIN, TT.THUNK, TT.SYMBOL, TT.PUNCTUATION,
                                  TT.OBJECT # dispatch on module/object -> find constructor
-                )
+                ):
+                    raise TypeError(f"Dispatched op '{op.tt}' doesn't satisfy function-like types")
                 H = op
                 ins = CT.Right
                 continue
@@ -671,13 +672,37 @@ def scan(a, b, env):
         r += [acc]
     return Leaf("vec", r)
 
+def eachright(a, b, env):
+    v = []
+    for x in b.R.w:
+        if isinstance(x, int):
+            x = Leaf(TT.NUM, x)
+        print("TY", a.tt,x.tt, Tree(a, b.L, x))
+        y, _ = Eval(Tree(a, b.L, x), env)
+        v.append(y)
+    return Leaf("vec", v)
+
+
+def each(a, b, env):
+    v = []
+    for x in a.w:
+        if isinstance(x, int):
+            y, _ = Eval(Tree(Leaf(TT.NUM, x), b.L, b.R), env)
+        else:
+            y, _ = Eval(Tree(x, b.L, b.R), env)
+        v.append(y)
+    return Leaf("vec", v)
+
 
 modules = {
     "vec": {
+        "eachright": eachright,
+        "each": each,
         "+": lambda a, b, env: Leaf("vec", [x + y for x, y in zip(a.w, b.w)]),
         "-": lambda a, b, env: Leaf("vec", [x - y for x, y in zip(a.w, b.w)]),
         "*": lambda a, b, env: Leaf("vec", [x * y for x, y in zip(a.w, b.w)]),
         "/": lambda a, b, env: Leaf("vec", [x // y for x, y in zip(a.w, b.w)]),
+        ("=", TT.NUM): lambda a, b, env: Leaf("vec", [int(x == b.w) for x in a.w]),
         ("+", TT.NUM): lambda a, b, env: Leaf("vec", [x + b.w for x in a.w]),
         ("-", TT.NUM): lambda a, b, env: Leaf("vec", [x - b.w for x in a.w]),
         ("*", TT.NUM): lambda a, b, env: Leaf("vec", [x * b.w for x in a.w]),
