@@ -54,6 +54,9 @@ class Leaf:
         if self.tt in (TT.PUNCTUATION, TT.NUM, TT.CONS,
                        TT.SYMBOL, TT.STRING, TT.SEPARATOR):
             return str(self.w)
+        if self.tt == TT.OBJECT:
+            # Print object, don't follow parent pointer
+            return repr({k: v for k, v in self.w.e.items() if k != ":"})
         return f"({self.w})"
 
 

@@ -13,12 +13,10 @@ import functors
 SELF_F = "f"
 DISPATCH_SEP = ":"
 
-class NoDispatch(Exception):
-    pass
 
-
-class CantReduce(Exception):
-    pass
+class UnexpectedType(Exception): pass
+class NoDispatch(Exception): pass
+class CantReduce(Exception): pass
 
 
 class Env:
@@ -161,7 +159,9 @@ def get_type(a, b, env):
 
 
 def unwrap(H):
-    if H.tt in (TT.FUNCTION, TT.THUNK):
+    if H.tt == TT.FUNCTION:
+        return H.body
+    if H.tt in (TT.FUNCTION_STUB, TT.THUNK):
         return H.w
     return H
 
@@ -364,7 +364,9 @@ BUILTINS = {
     "inc": lambda a, b, env: env.assign(a.w, Leaf(TT.NUM, env.lookup(a.w, Leaf(TT.NUM, 0)).w + b.w)),
     "T": get_type,
     "type": get_type,
+    "retype": lambda a, b, env: Leaf(b.w, a.w),
     "sametype": lambda a, b, env: Leaf(TT.NUM, 1 if a.tt == b.tt else 0),
+    "showenv": lambda a, b, env: Leaf(TT.OBJECT, env),
     "dispatch": set_dispatch,
     "@": at,
     "$": lambda a, b, env: env.lookup(b.w, a),
@@ -422,7 +424,8 @@ def tree2env(x, env):
 def path2env(path, env):
     for p in path:
         env = env.lookup(p, None)
-        assert env.tt == TT.OBJECT
+        if env.tt != TT.OBJECT:
+            raise UnexpectedType("Path2env expected OBJECT got {env.tt}")
         env = env.w
     assert env is not None
     return env
@@ -494,7 +497,7 @@ def Eval(x, env):
                 ins = next_ins(x)
                 continue
             elif H.tt == TT.FUNCTION_STUB:
-                H = Tree(unwrap(H), Leaf(TT.BUILTIN, makefunc), Leaf(TT.PUNCTUATION, "."))
+                H = Tree(H, Leaf(TT.BUILTIN, makefunc), Unit)
                 ins = CT.Left
                 continue
             elif H.tt == TT.FUNCTION:
@@ -527,7 +530,7 @@ def Eval(x, env):
                 if op is None:
                     raise NoDispatch(f"Can't find module function {H} on L: {L.tt}")
                 assert op.tt in (TT.CONTINUATION, TT.SPECIAL,
-                                 TT.FUNCTION, # TT.CLOSURE,
+                                 TT.FUNCTION, TT.FUNCTION_STUB, # TT.CLOSURE,
                                  TT.BUILTIN, TT.THUNK)
                 H = op
                 ins = CT.Right
@@ -575,7 +578,7 @@ def Eval(x, env):
                     op = env.lookup(fn, None)
                 if op is None:
                     raise NoDispatch(f"Can't dispatch {fn} on {L.tt}:{R.tt}")
-                #print("LOOKUPED", fn, L.tt, op, type(op), op.tt, file=sys.stderr)
+                # print("LOOKUPED", fn, L.tt, op, type(op), op.tt, file=sys.stderr)
                 if op.tt not in (TT.CONTINUATION, TT.SPECIAL,
                                  TT.FUNCTION, TT.FUNCTION_STUB, # TT.CLOSURE,
                                  TT.BUILTIN, TT.THUNK, TT.SYMBOL, TT.PUNCTUATION,
@@ -699,9 +702,25 @@ def each(a, b, env):
         v.append(y)
     return Leaf("vec", v)
 
+
 def arithmetic_series_sum(a, b, by):
     n = (b - 1 - a) // by + 1
     return (by * n * (n - 1) // 2) + (n * a)
+
+
+def asmod_vec(a, b, env):
+    d = {}
+    for item in a.w:
+        assert item.tt == TT.TREE
+        assert item.L.tt in (TT.SYMBOL, TT.STRING)
+        d[item.L.w] = item.R
+    return Leaf(TT.OBJECT, Env(env, from_dict=d))
+
+def asmod_tree(a, b, env):
+    assert a.L.tt in (TT.SYMBOL, TT.STRING)
+    d = {a.L.w: a.R}
+    return Leaf(TT.OBJECT, Env(env, from_dict=d))
+
 
 modules = {
     "range": {
@@ -720,6 +739,7 @@ modules = {
         ",": lambda a, b, env: a.w.append(b) or a,
         ("@", TT.NUM): lambda a, b, env: Leaf(TT.NUM, a.w[b.w]),
         "len": lambda a, b, env: Leaf(TT.NUM, len(a.w)),
+        "asmod": asmod_vec,
     },
     "num_vec": {
         "eachright": eachright,
@@ -741,14 +761,16 @@ modules = {
         "scan": scan,
     },
     TT.TREE: {
-        "if": if_,
+        # "if": if_,
         "L": lambda a, _, env: a.L,
         "H": lambda a, _, env: a.H,
         "R": lambda a, _, env: a.R,
+        "asmod": asmod_tree,
     },
     TT.OBJECT: {
         "clone": lambda a, b, env: Leaf(TT.OBJECT, a.w),
-        ("@", TT.TREE): lambda a, b, env: env.bind(b.L.w, b.R) # TODO implement assignment
+        ("@", TT.TREE): lambda a, b, env: env.bind(b.L.w, b.R), # TODO implement assignment
+        ("@", TT.SYMBOL): lambda a, b, env: a.w.lookup(b.w, Unit),
     },
     TT.NUM: {
         (",", TT.NUM): lambda a, b, env: Leaf("num_vec", [a.w, b.w]),
@@ -764,7 +786,13 @@ modules = {
     },
     TT.FUNCTION: {
         ("dispatch", TT.TREE): lambda a, b, env: set_dispatch(a, b, env),
-    }
+    },
+    TT.FUNCTION_STUB: {
+        "asmod": lambda a, b, env: Tree(unwrap(a), Leaf(TT.SYMBOL, "asmod"), Unit),
+    },
+    TT.THUNK: {
+        "asmod": lambda a, b, env: Tree(unwrap(a), Leaf(TT.SYMBOL, "asmod"), Unit),
+    },
 }
 
 def as_module(mod_dict):
@@ -787,7 +815,7 @@ def Execute(code, env):
         return x, env
     except ParseError as err:
         print(f"Parse error: {err}", file=sys.stderr)
-    except (NoDispatch, CantReduce) as err:
+    except (NoDispatch, CantReduce, UnexpectedType) as err:
         print(err, file=sys.stderr)
 
     return None, None
