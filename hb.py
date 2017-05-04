@@ -353,8 +353,13 @@ def construct(a, b, env):
     return Tree(a, b, Unit)
 
 
+def eq(a, b, env):
+    result = 1 if a.tt == b.tt and a.w == b.w else 0
+    return Leaf(TT.NUM, result)
+
+
 BUILTINS = {
-    "=": lambda a, b, env: Leaf(TT.NUM, 1 if a.w == b.w else 0),
+    "=": eq,
     "dec": lambda a, b, env: env.assign(a.w, Leaf(TT.NUM, env.lookup(a.w, Leaf(TT.NUM, 1)).w - b.w)),
     "inc": lambda a, b, env: env.assign(a.w, Leaf(TT.NUM, env.lookup(a.w, Leaf(TT.NUM, 0)).w + b.w)),
     "T": get_type,
@@ -371,7 +376,7 @@ BUILTINS = {
     "if": lambda a, b, env: unwrap(a.L),
     # "then": lambda a, b, env: if_(b, a, env),
     "not": lambda a, b, env: Leaf(TT.NUM, 1 - a.w), # TODO doesn't play with unit ()
-    "?": lambda a, b, env: if_(b, a, env),
+    "then": lambda a, b, env: if_(b, a, env),
     ";": lambda a, b, env: b,
     "bake": bake,
     "open": lambda a, _, env: unwrap(a),
@@ -731,6 +736,7 @@ modules = {
         ("*", TT.NUM): lambda a, b, env: Leaf("num_vec", [x * b.w for x in a.w]),
         ("/", TT.NUM): lambda a, b, env: Leaf("num_vec", [x // b.w for x in a.w]),
         ("@", TT.NUM): lambda a, b, env: Leaf(TT.NUM, a.w[b.w]),
+        "sum": lambda a, b, env: Leaf(TT.NUM, sum(a.w)),
         "fold": fold,
         "scan": scan,
     },
