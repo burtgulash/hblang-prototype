@@ -169,11 +169,12 @@ def symbol(tok):
     # return tok[1:]
     return tok
 
+text_rx = "a-zA-Z0-9"
 
 def lex_(text):
     rules = (
         (TT.NUM, num, "[_0-9]+"),
-        (TT.SYMBOL, identity, "[a-zA-Z][a-zA-Z0-9_]*"),
+        (TT.SYMBOL, identity, f"[{text_rx}][{text_rx}_]*"),
         (TT.STRING, string, r'"(\\.|[^"])*"'),
         (TT.COMMENT, comment, "#.*\n"),
         (TT.CONS, identity, "[:.]"),

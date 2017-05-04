@@ -363,7 +363,8 @@ BUILTINS = {
     "dispatch": set_dispatch,
     "@": at,
     "$": lambda a, b, env: env.lookup(b.w, a),
-    "til": lambda a, b, env: Leaf("vec", list(range(a.w, b.w))),
+    "til": lambda a, b, env: Leaf("range", (a.w, 1, b.w)),
+    "enumerate": lambda a, b, env: Leaf("range", (0, 1, a.w)),
     "as": lambda a, b, env: env.bind(b.w, a),
     "assign": lambda a, b, env: env.assign(b.w, a),
     "is": lambda a, b, env: env.assign(a.w, b),
@@ -375,7 +376,7 @@ BUILTINS = {
     "bake": bake,
     "open": lambda a, _, env: unwrap(a),
     "unwrap": lambda a, _, env: unwrap(a),
-    ",": app,
+    ",": lambda a, b, env: Leaf("vec", [a, b]),
     "tovec": lambda a, _, env: Leaf("vec", []),
     "print": print_fn,
     "wait": wait,
@@ -569,7 +570,7 @@ def Eval(x, env):
                     op = env.lookup(fn, None)
                 if op is None:
                     raise NoDispatch(f"Can't dispatch {fn} on {L.tt}:{R.tt}")
-                print("LOOKUPED", fn, L.tt, op, type(op), op.tt, file=sys.stderr)
+                #print("LOOKUPED", fn, L.tt, op, type(op), op.tt, file=sys.stderr)
                 if op.tt not in (TT.CONTINUATION, TT.SPECIAL,
                                  TT.FUNCTION, TT.FUNCTION_STUB, # TT.CLOSURE,
                                  TT.BUILTIN, TT.THUNK, TT.SYMBOL, TT.PUNCTUATION,
@@ -693,20 +694,42 @@ def each(a, b, env):
         v.append(y)
     return Leaf("vec", v)
 
+def arithmetic_series_sum(a, b, by):
+    n = (b - 1 - a) // by + 1
+    return (by * n * (n - 1) // 2) + (n * a)
 
 modules = {
+    "range": {
+        ("+", TT.NUM): lambda a, b, env: Leaf("range", (a.w[0] + b.w, a.w[1], a.w[2] + b.w)),
+        ("-", TT.NUM): lambda a, b, env: Leaf("range", (a.w[0] - b.w, a.w[1], a.w[2] - b.w)),
+        ("*", TT.NUM): lambda a, b, env: Leaf("range", (a.w[0] * b.w, a.w[1] * b.w, a.w[2] * b.w)),
+        # Division needs to convert to vec and then divide, otherwise lossy
+        "tovec": lambda a, b, env: Leaf("num_vec", list(range(a.w[0], a.w[2], a.w[1]))),
+        "fold": lambda a, b, env: Tree(Tree(a, Leaf(TT.SYMBOL, "tovec"), Unit), Leaf(TT.SYMBOL, "fold"), b),
+        "scan": lambda a, b, env: Tree(Tree(a, Leaf(TT.SYMBOL, "tovec"), Unit), Leaf(TT.SYMBOL, "scan"), b),
+        "sum": lambda a, b, env: Leaf(TT.NUM, arithmetic_series_sum(a.w[0], a.w[2], a.w[1])),
+        "len": lambda a, b, env: Leaf(TT.NUM, (a.w[2] - 1 - a.w[0]) // a.w[1] + 1),
+
+    },
     "vec": {
+        ",": lambda a, b, env: a.w.append(b) or a,
+        ("@", TT.NUM): lambda a, b, env: Leaf(TT.NUM, a.w[b.w]),
+        "len": lambda a, b, env: Leaf(TT.NUM, len(a.w)),
+    },
+    "num_vec": {
         "eachright": eachright,
         "each": each,
-        "+": lambda a, b, env: Leaf("vec", [x + y for x, y in zip(a.w, b.w)]),
-        "-": lambda a, b, env: Leaf("vec", [x - y for x, y in zip(a.w, b.w)]),
-        "*": lambda a, b, env: Leaf("vec", [x * y for x, y in zip(a.w, b.w)]),
-        "/": lambda a, b, env: Leaf("vec", [x // y for x, y in zip(a.w, b.w)]),
-        ("=", TT.NUM): lambda a, b, env: Leaf("vec", [int(x == b.w) for x in a.w]),
-        ("+", TT.NUM): lambda a, b, env: Leaf("vec", [x + b.w for x in a.w]),
-        ("-", TT.NUM): lambda a, b, env: Leaf("vec", [x - b.w for x in a.w]),
-        ("*", TT.NUM): lambda a, b, env: Leaf("vec", [x * b.w for x in a.w]),
-        ("/", TT.NUM): lambda a, b, env: Leaf("vec", [x // b.w for x in a.w]),
+        "len": lambda a, b, env: Leaf(TT.NUM, len(a.w)),
+        ("+", "num_vec"): lambda a, b, env: Leaf("num_vec", [x + y for x, y in zip(a.w, b.w)]),
+        ("-", "num_vec"): lambda a, b, env: Leaf("num_vec", [x - y for x, y in zip(a.w, b.w)]),
+        ("*", "num_vec"): lambda a, b, env: Leaf("num_vec", [x * y for x, y in zip(a.w, b.w)]),
+        ("/", "num_vec"): lambda a, b, env: Leaf("num_vec", [x // y for x, y in zip(a.w, b.w)]),
+        (",", TT.NUM): lambda a, b, env: a.w.append(b.w) or a,
+        ("=", TT.NUM): lambda a, b, env: Leaf("num_vec", [int(x == b.w) for x in a.w]),
+        ("+", TT.NUM): lambda a, b, env: Leaf("num_vec", [x + b.w for x in a.w]),
+        ("-", TT.NUM): lambda a, b, env: Leaf("num_vec", [x - b.w for x in a.w]),
+        ("*", TT.NUM): lambda a, b, env: Leaf("num_vec", [x * b.w for x in a.w]),
+        ("/", TT.NUM): lambda a, b, env: Leaf("num_vec", [x // b.w for x in a.w]),
         ("@", TT.NUM): lambda a, b, env: Leaf(TT.NUM, a.w[b.w]),
         "fold": fold,
         "scan": scan,
@@ -722,6 +745,7 @@ modules = {
         ("@", TT.TREE): lambda a, b, env: env.bind(b.L.w, b.R) # TODO implement assignment
     },
     TT.NUM: {
+        (",", TT.NUM): lambda a, b, env: Leaf("num_vec", [a.w, b.w]),
         ("+", TT.NUM): lambda a, b, env: Leaf(TT.NUM, a.w + b.w),
         ("-", TT.NUM): lambda a, b, env: Leaf(TT.NUM, a.w - b.w),
         ("*", TT.NUM): lambda a, b, env: Leaf(TT.NUM, a.w * b.w),
@@ -757,7 +781,7 @@ def Execute(code, env):
         return x, env
     except ParseError as err:
         print(f"Parse error: {err}", file=sys.stderr)
-    except (NoDispatch, CantReduce, TypeError) as err:
+    except (NoDispatch, CantReduce) as err:
         print(err, file=sys.stderr)
 
     return None, None
