@@ -117,13 +117,13 @@ def makefunc(a, b, env):
     return Leaf(TT.FUNCTION, Function(left_name, right_name, body, env))
 
 
-def load(a, b, env):
+def load(a, b, env, cstack):
     with open(b.w) as f:
         code = f.read()
     # print(f"CODE: '{code}'", file=sys.stderr)
 
-    x, env = Execute(code, env)
-    return Leaf(TT.OBJECT, env)
+    x, env, cstack = Execute(code, env, cstack)
+    return Leaf(TT.OBJECT, env), env, cstack
 
 
 def reset(a, b, env, cstack):
@@ -388,7 +388,6 @@ BUILTINS = {
     "print": print_fn,
     "wait": wait,
     "!": invoke,
-    "load": load,
     "O": new_object(Unit, Unit, None),
     "object": new_object(Unit, Unit, None),
     "bakevars": bake_vars,
@@ -403,6 +402,7 @@ BUILTINS = {
 SPECIAL = {
     "cpush": reset,
     "cpop": shift,
+    "load": load,
 }
 
 
@@ -440,9 +440,8 @@ def next_ins(x):
     raise AssertionError(f"Result needs to be either Leaf or Tree. Got '{type(x)}'")
 
 
-def Eval(x, env):
+def Eval(x, env, cstack):
     # Stack of continuations
-    cstack = Cactus()
     cstack.push(Frame(CT.Return, None, None, None, env))
     # Stored instruction pointer
     ins = next_ins(x)
@@ -681,26 +680,26 @@ def scan(a, b, env):
         r += [acc]
     return Leaf("vec", r)
 
-def eachright(a, b, env):
-    v = []
-    for x in b.R.w:
-        if isinstance(x, int):
-            x = Leaf(TT.NUM, x)
-        print("TY", a.tt,x.tt, Tree(a, b.L, x))
-        y, _ = Eval(Tree(a, b.L, x), env)
-        v.append(y)
-    return Leaf("vec", v)
-
-
-def each(a, b, env):
-    v = []
-    for x in a.w:
-        if isinstance(x, int):
-            y, _ = Eval(Tree(Leaf(TT.NUM, x), b.L, b.R), env)
-        else:
-            y, _ = Eval(Tree(x, b.L, b.R), env)
-        v.append(y)
-    return Leaf("vec", v)
+# def eachright(a, b, env):
+#     v = []
+#     for x in b.R.w:
+#         if isinstance(x, int):
+#             x = Leaf(TT.NUM, x)
+#         print("TY", a.tt,x.tt, Tree(a, b.L, x))
+#         y, _ = Eval(Tree(a, b.L, x), env)
+#         v.append(y)
+#     return Leaf("vec", v)
+# 
+# 
+# def each(a, b, env):
+#     v = []
+#     for x in a.w:
+#         if isinstance(x, int):
+#             y, _ = Eval(Tree(Leaf(TT.NUM, x), b.L, b.R), env)
+#         else:
+#             y, _ = Eval(Tree(x, b.L, b.R), env)
+#         v.append(y)
+#     return Leaf("vec", v)
 
 
 def arithmetic_series_sum(a, b, by):
@@ -742,8 +741,8 @@ modules = {
         "asmod": asmod_vec,
     },
     "num_vec": {
-        "eachright": eachright,
-        "each": each,
+        #"eachright": eachright,
+        #"each": each,
         "len": lambda a, b, env: Leaf(TT.NUM, len(a.w)),
         ("+", "num_vec"): lambda a, b, env: Leaf("num_vec", [x + y for x, y in zip(a.w, b.w)]),
         ("-", "num_vec"): lambda a, b, env: Leaf("num_vec", [x - y for x, y in zip(a.w, b.w)]),
@@ -804,15 +803,15 @@ def as_module(mod_dict):
     return d
 
 
-def Execute(code, env):
+def Execute(code, env, cstack):
     try:
         x = code
         x = Lex(x)
         # print("LEX", y)
         x = Parse(x)
         # print("PARSE", y)
-        x, env = Eval(x, env)
-        return x, env
+        x, env, cstack = Eval(x, env, cstack)
+        return x, env, cstack
     except ParseError as err:
         print(f"Parse error: {err}", file=sys.stderr)
     except (NoDispatch, CantReduce, UnexpectedType) as err:
@@ -848,7 +847,7 @@ def prepare_env():
     return env
 
 
-def Repl(env, prompt="> "):
+def Repl(env, rstack, prompt="> "):
     import readline
     readline.parse_and_bind('tab: complete')
     readline.parse_and_bind('set editing-mode vi')
@@ -856,7 +855,7 @@ def Repl(env, prompt="> "):
     while True:
         try:
             x = input(prompt)
-            x, _ = Execute(x, env)
+            x, _, _ = Execute(x, env, cstack)
             print(x)
         except TypecheckError as err:
             print(err, file=sys.stderr)
@@ -864,30 +863,13 @@ def Repl(env, prompt="> "):
             break
 
 
-def run(argv):
-    env = prepare_env()
-    if cmd == "repl":
-        Repl(env)
-    elif cmd == "run":
-        if len(argv) < 3:
-            src = sys.stdin.read()
-        else:
-            f = argv[2]
-            if f == "-":
-                src = sys.stdin.read()
-            else:
-                with open(f) as inp:
-                    src = ff.read()
-        x, env = Execute(src, env)
-        print(x)
-
-
 if __name__ == "__main__":
     env = prepare_env()
+    cstack = Cactus()
 
     if len(sys.argv) == 1:
         try:
-            Repl(env)
+            Repl(env, cstack)
         except KeyboardInterrupt:
             pass
     elif len(sys.argv) >= 2:
@@ -899,7 +881,7 @@ if __name__ == "__main__":
             else:
                 src = sys.stdin.read()
 
-            x, env = Execute(src, env)
+            x, env, cstack = Execute(src, env, cstack)
             print(x)
         else:
             print("Missing command (run)", file=sys.stderr)
