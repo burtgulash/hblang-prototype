@@ -10,18 +10,18 @@ class Some:
         return f"Some({self.value})"
 
 
-class Binding:
-
-    def __init__(self, functor, name):
-        self.functor = functor
-        self.name = name
-
-    def __str__(self):
-        return f"{str(self.functor)} => {self.name}"
-
-
-def make_binding(a, b, env):
-    return Leaf("binding", Binding(a, b.w))
+# class Binding:
+# 
+#     def __init__(self, functor, name):
+#         self.functor = functor
+#         self.name = name
+# 
+#     def __str__(self):
+#         return f"{str(self.functor)} => {self.name}"
+# 
+# 
+# def make_binding(a, b):
+#     return Leaf("binding", Binding(a, b.w))
 
 
 builtins = {
@@ -33,13 +33,13 @@ builtins = {
 
 modules = {
     TT.UNIT: {
-        ">>": lambda a, b, env: a,
-        "?": lambda a, b, env: unwrap(b.R),
+        ">>": lambda a, b: a,
+        "?": lambda a, b: unwrap(b.R),
     },
     "Some": {
-        ".": lambda a, b, env: Leaf("Some", Some(a)),
-        ">>": lambda a, b, env: Tree(a.w.value, b, Unit), # TODO define this generically in some parent functor?
-        (">>", TT.TREE): lambda a, b, env: Tree(a.w.value, b.L, b.R),
-        # ("+>", TT.TREE): lambda a, b, env: Tree(Tree(a, Leaf(TT.PUNCTUATION, ">>"), b), Leaf(TT.SYMBOL, "Some"), Unit),
+        ".": lambda a, b: Leaf("Some", Some(a)),
+        ">>": lambda a, b: Tree(a.w.value, b, Unit), # TODO define this generically in some parent functor?
+        (">>", TT.TREE): lambda a, b: Tree(a.w.value, b.L, b.R),
+        # ("+>", TT.TREE): lambda a, b: Tree(Tree(a, Leaf(TT.PUNCTUATION, ">>"), b), Leaf(TT.SYMBOL, "Some"), Unit),
     },
 }
