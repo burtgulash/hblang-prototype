@@ -97,6 +97,10 @@ def bakevars(x, vars):
 
 
 def makefunc(a, b, env, cstack):
+    return makefunc_(a, env), env, cstack
+
+
+def makefunc_(a, env):
     if a.tt not in (TT.FUNCTION_STUB, TT.THUNK):
         raise Exception(f"Can't create function out of '{a.tt}'")
 
@@ -114,7 +118,7 @@ def makefunc(a, b, env, cstack):
             body = body.R
 
     body = bakevars(body, [left_name, right_name])
-    return Leaf(TT.FUNCTION, Function(left_name, right_name, body, env)), env, cstack
+    return Leaf(TT.FUNCTION, Function(left_name, right_name, body, env))
 
 
 def load(a, b, env, cstack):
@@ -582,7 +586,7 @@ def right(a, b, env):
     return b
 
 
-def fold(a, b, env):
+def fold(a, b):
     if isinstance(b, Tree):
         zero = b.R.w
         op = b.L.w
@@ -608,7 +612,7 @@ def fold(a, b, env):
     return Leaf(TT.NUM, acc)
 
 
-def scan(a, b, env):
+def scan(a, b):
     if isinstance(b, Tree):
         zero = b.R.w
         op = b.L.w
@@ -652,6 +656,10 @@ def each(a, b, env, cstack):
         f, R = b.L, b.R
     else:
         f, R = b, Unit
+
+    if f.tt == TT.FUNCTION_STUB:
+        f = makefunc_(f, env)
+
     v = [Eval(Tree(x, f, R), env, cstack)[0] for x in a.w]
     return Leaf("vec", v), env, cstack
 
@@ -661,7 +669,11 @@ def num_each(a, b, env, cstack):
         f, R = b.L, b.R
     else:
         f, R = b, Unit
-    v = [Eval(Tree(Leaf(TT.NUM, x), f, R), env, cstack)[0] for x in a.w]
+
+    if f.tt == TT.FUNCTION_STUB:
+        f = makefunc_(f, env)
+
+    v = [Eval(Tree(Leaf(TT.NUM, x), f, R), env, cstack)[0].w for x in a.w]
     return Leaf(a.tt, v), env, cstack
 
 
@@ -695,7 +707,7 @@ modules = {
         "scan": lambda a, b: Tree(Tree(a, Leaf(TT.SYMBOL, "tovec"), Unit), Leaf(TT.SYMBOL, "scan"), b),
         "sum": lambda a, b: Leaf(TT.NUM, arithmetic_series_sum(a.w[0], a.w[2], a.w[1])),
         "len": lambda a, b: Leaf(TT.NUM, (a.w[2] - 1 - a.w[0]) // a.w[1] + 1),
-
+        "each": lambda a, b: Tree(Tree(a, Leaf(TT.SYMBOL, "tovec"), Unit), Leaf(TT.SYMBOL, "each"), b),
     },
     "vec": {
         ",": lambda a, b: a.w.append(b) or a,
@@ -736,7 +748,7 @@ modules = {
         ("@", TT.SYMBOL): lambda a, b: a.w.lookup(b.w, Unit),
     },
     TT.NUM: {
-        (",", TT.NUM): lambda a, b: Leaf(a.tt, [a.w, b.w]),
+        (",", TT.NUM): lambda a, b: Leaf("num_vec", [a.w, b.w]),
         ("+", TT.NUM): lambda a, b: Leaf(TT.NUM, a.w + b.w),
         ("-", TT.NUM): lambda a, b: Leaf(TT.NUM, a.w - b.w),
         ("*", TT.NUM): lambda a, b: Leaf(TT.NUM, a.w * b.w),
@@ -850,6 +862,7 @@ def Repl(env, rstack, prompt="> "):
             print(err, file=sys.stderr)
         except (EOFError, KeyboardInterrupt):
             break
+        sys.stdout.flush()
 
 
 if __name__ == "__main__":
