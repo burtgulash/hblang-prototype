@@ -347,20 +347,17 @@ BUILTINS = {
     "!%": not_typecheck,
     "`": construct,
     "id": lambda a, b: a,
-}
 
+    "cpush":   [reset],
+    "cpop":    [shift],
+    "load":    [load],
 
-SPECIAL = {
-    "cpush": reset,
-    "cpop": shift,
-    "load": load,
-
-    "showenv": lambda a, b, env, cstack: (Leaf(TT.OBJECT, env), env, cstack),
-    "$": lambda a, b, env, cstack: (env.lookup(b.w, a), env, cstack),
-    "as": lambda a, b, env, cstack: (env.bind(b.w, a), env, cstack),
-    "assign": lambda a, b, env, cstack: (env.assign(b.w, a), env, cstack),
-    "is": lambda a, b, env, cstack: (env.assign(a.w, b), env, cstack),
-    "func": makefunc,
+    "showenv": [lambda a, b, env, cstack: (Leaf(TT.OBJECT, env), env, cstack)],
+    "$":       [lambda a, b, env, cstack: (env.lookup(b.w, a), env, cstack)],
+    "as":      [lambda a, b, env, cstack: (env.bind(b.w, a), env, cstack)],
+    "assign":  [lambda a, b, env, cstack: (env.assign(b.w, a), env, cstack)],
+    "is":      [lambda a, b, env, cstack: (env.assign(a.w, b), env, cstack)],
+    "func":    [makefunc],
 }
 
 
@@ -638,26 +635,34 @@ def scan(a, b, env):
         r += [acc]
     return Leaf("vec", r)
 
-# def eachright(a, b, env):
-#     v = []
-#     for x in b.R.w:
-#         if isinstance(x, int):
-#             x = Leaf(TT.NUM, x)
-#         print("TY", a.tt,x.tt, Tree(a, b.L, x))
-#         y, _ = Eval(Tree(a, b.L, x), env)
-#         v.append(y)
-#     return Leaf("vec", v)
-# 
-# 
-# def each(a, b, env):
-#     v = []
-#     for x in a.w:
-#         if isinstance(x, int):
-#             y, _ = Eval(Tree(Leaf(TT.NUM, x), b.L, b.R), env)
-#         else:
-#             y, _ = Eval(Tree(x, b.L, b.R), env)
-#         v.append(y)
-#     return Leaf("vec", v)
+
+#def eachright(a, b, env):
+#    v = []
+#    for x in b.R.w:
+#        if isinstance(x, int):
+#            x = Leaf(TT.NUM, x)
+#        print("TY", a.tt,x.tt, Tree(a, b.L, x))
+#        y, _ = Eval(Tree(a, b.L, x), env)
+#        v.append(y)
+#    return Leaf("vec", v)
+#
+#
+def each(a, b, env, cstack):
+    if b.tt == TT.TREE:
+        f, R = b.L, b.R
+    else:
+        f, R = b, Unit
+    v = [Eval(Tree(x, f, R), env, cstack)[0] for x in a.w]
+    return Leaf("vec", v), env, cstack
+
+
+def num_each(a, b, env, cstack):
+    if b.tt == TT.TREE:
+        f, R = b.L, b.R
+    else:
+        f, R = b, Unit
+    v = [Eval(Tree(Leaf(TT.NUM, x), f, R), env, cstack)[0] for x in a.w]
+    return Leaf(a.tt, v), env, cstack
 
 
 def arithmetic_series_sum(a, b, by):
@@ -697,10 +702,11 @@ modules = {
         ("@", TT.NUM): lambda a, b: Leaf(TT.NUM, a.w[b.w]),
         "len": lambda a, b: Leaf(TT.NUM, len(a.w)),
         "asmod": asmod_vec,
+        "each": [each],
     },
     "num_vec": {
         #"eachright": eachright,
-        #"each": each,
+        "each": [num_each],
         "len": lambda a, b: Leaf(TT.NUM, len(a.w)),
         ("+", "num_vec"): lambda a, b: Leaf("num_vec", [x + y for x, y in zip(a.w, b.w)]),
         ("-", "num_vec"): lambda a, b: Leaf("num_vec", [x - y for x, y in zip(a.w, b.w)]),
@@ -730,7 +736,7 @@ modules = {
         ("@", TT.SYMBOL): lambda a, b: a.w.lookup(b.w, Unit),
     },
     TT.NUM: {
-        (",", TT.NUM): lambda a, b: Leaf("num_vec", [a.w, b.w]),
+        (",", TT.NUM): lambda a, b: Leaf(a.tt, [a.w, b.w]),
         ("+", TT.NUM): lambda a, b: Leaf(TT.NUM, a.w + b.w),
         ("-", TT.NUM): lambda a, b: Leaf(TT.NUM, a.w - b.w),
         ("*", TT.NUM): lambda a, b: Leaf(TT.NUM, a.w * b.w),
@@ -740,6 +746,15 @@ modules = {
         ("<=", TT.NUM): lambda a, b: Leaf(TT.NUM, 1 if a.w <= b.w else 0),
         (">", TT.NUM): lambda a, b: Leaf(TT.NUM, 1 if a.w > b.w else 0),
         (">=", TT.NUM): lambda a, b: Leaf(TT.NUM, 1 if a.w >= b.w else 0),
+    },
+    TT.SYMBOL: {
+        ("^", TT.SYMBOL): lambda a, b: Leaf(a.tt, a.w + b.w),
+        ("^", TT.STRING): lambda a, b: Leaf(a.tt, a.w + b.w),
+    },
+    TT.STRING: {
+        ("*", TT.NUM): lambda a, b: Leaf(a.tt, a.w * b.w),
+        ("^", TT.STRING): lambda a, b: Leaf(a.tt, a.w + b.w),
+        ("^", TT.SYMBOL): lambda a, b: Leaf(a.tt, a.w + b.w),
     },
     TT.FUNCTION: {
         # ("dispatch", TT.TREE): lambda a, b, env: set_dispatch(a, b, env), # TODO special
@@ -757,7 +772,13 @@ def as_module(mod_dict):
     for k, v in mod_dict.items():
         if not isinstance(k, str):
             k = DISPATCH_SEP.join(map(str, k))
-        d[k] = Leaf(TT.BUILTIN, v)
+
+        if isinstance(v, list):
+            v = Leaf(TT.SPECIAL, v[0])
+        else:
+            v = Leaf(TT.BUILTIN, v)
+
+        d[k] = v
     return d
 
 
@@ -784,8 +805,18 @@ def prepare_env():
                 in {
                     **BUILTINS,
                     **functors.builtins,
-                }.items()}
-    special = {k: Leaf(TT.SPECIAL, x) for k, x in SPECIAL.items()}
+                }.items()
+                if not isinstance(x, list)
+    }
+    special = {k: Leaf(TT.SPECIAL, x[0])
+               for k, x
+               in {
+                   **BUILTINS,
+                   **functors.builtins,
+               }.items()
+               if isinstance(x, list)
+    }
+
     # dispatches = {DISPATCH_SEP.join(map(str, k)): Leaf(TT.BUILTIN, v) for k, v in dispatch.items()}
     mods = {k: Leaf(TT.OBJECT, Env(None, from_dict=as_module(mod)))
             for k, mod
