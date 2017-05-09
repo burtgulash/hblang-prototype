@@ -92,7 +92,7 @@ def bakevars(x, vars):
         body = bakevars(x.w.body, vars)
         x = x.clone(body)
     elif x.tt == TT.SYMBOL and x.w in vars:
-        x = Tree(Leaf(TT.CONS, "."), Leaf(TT.PUNCTUATION, "$"), x)
+        x = Tree(Unit, Leaf(TT.PUNCTUATION, "$"), x)
     return x
 
 
@@ -127,6 +127,8 @@ def load(a, b, env, cstack):
     # print(f"CODE: '{code}'", file=sys.stderr)
 
     _, module, _ = Execute(code, Env(env), cstack)
+    if module is None:
+        raise TypecheckError("Module can't be NULL")
     return Leaf(TT.OBJECT, module), env, cstack
 
 
@@ -329,7 +331,6 @@ BUILTINS = {
     "retype": lambda a, b: Leaf(b.w, a.w),
     "sametype": lambda a, b: Leaf(TT.NUM, 1 if a.tt == b.tt else 0),
     "dispatch": set_dispatch,
-    "@": at,
     "til": lambda a, b: Leaf("range", (a.w, 1, b.w)),
     "enumerate": lambda a, b: Leaf("range", (0, 1, a.w)),
     "if": lambda a, b: unwrap(a.L),
@@ -357,6 +358,7 @@ BUILTINS = {
     "load":    [load],
 
     "showenv": [lambda a, b, env, cstack: (Leaf(TT.OBJECT, env), env, cstack)],
+    "@":       [at],
     "$":       [lambda a, b, env, cstack: (env.lookup(b.w, a), env, cstack)],
     "as":      [lambda a, b, env, cstack: (env.bind(b.w, a), env, cstack)],
     "assign":  [lambda a, b, env, cstack: (env.assign(b.w, a), env, cstack)],
@@ -728,16 +730,18 @@ modules = {
     },
     "vec": {
         ",": lambda a, b: a.w.append(b) or a,
+        ("~", "vec"): lambda a, b: a.w + b.w,
         ("@", TT.NUM): lambda a, b: a.w[b.w],
         "len": lambda a, b: Leaf(TT.NUM, len(a.w)),
         "asmod": asmod_vec,
         "each": [each],
-        "eachright": [eachright],
+        # "eachright": [eachright],
         "fold": [fold],
     },
     "num_vec": {
+        ("~", "num_vec"): lambda a, b: a.w + b.w,
         "each": [num_each],
-        "eachright": [num_eachright],
+        # "eachright": [num_eachright],
         "len": lambda a, b: Leaf(TT.NUM, len(a.w)),
         ("+", "num_vec"): lambda a, b: Leaf("num_vec", [x + y for x, y in zip(a.w, b.w)]),
         ("-", "num_vec"): lambda a, b: Leaf("num_vec", [x - y for x, y in zip(a.w, b.w)]),
@@ -789,6 +793,7 @@ modules = {
         ("*", TT.NUM): lambda a, b: Leaf(a.tt, a.w * b.w),
         ("~", TT.STRING): lambda a, b: Leaf(a.tt, a.w + b.w),
         ("~", TT.SYMBOL): lambda a, b: Leaf(a.tt, a.w + b.w),
+        ("/", TT.STRING): lambda a, b: Leaf("vec", [Leaf(TT.STRING, x) for x in a.w.split(b.w)]),
     },
     TT.FUNCTION: {
         # ("dispatch", TT.TREE): lambda a, b, env: set_dispatch(a, b, env), # TODO special
