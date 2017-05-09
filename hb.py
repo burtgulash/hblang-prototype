@@ -7,7 +7,6 @@ from c import Lex, Parse, \
               ParseError, TT, Tree, Leaf, Unit
 
 from stack import Cactus, CT, Frame
-import functors
 
 
 SELF_F = "F"
@@ -322,49 +321,6 @@ def construct(a, b):
 def eq(a, b):
     result = 1 if a.tt == b.tt and a.w == b.w else 0
     return Leaf(TT.NUM, result)
-
-
-BUILTINS = {
-    "=": eq,
-    "T": get_type,
-    "type": get_type,
-    "retype": lambda a, b: Leaf(b.w, a.w),
-    "sametype": lambda a, b: Leaf(TT.NUM, 1 if a.tt == b.tt else 0),
-    "dispatch": set_dispatch,
-    "til": lambda a, b: Leaf("range", (a.w, 1, b.w)),
-    "enumerate": lambda a, b: Leaf("range", (0, 1, a.w)),
-    "if": lambda a, b: unwrap(a.L),
-    "not": lambda a, b: Leaf(TT.NUM, 1 - a.w), # TODO doesn't play with unit ()
-    "then": lambda a, b: if_(b, a),
-    ";": lambda a, b: b,
-    "bake": bake,
-    "open": lambda a, _: unwrap(a),
-    "unwrap": lambda a, _: unwrap(a),
-    ",": lambda a, b: Leaf("vec", [a, b]),
-    "tovec": lambda a, b: Leaf("vec", [a]),
-    "print": print_fn,
-    "wait": wait,
-    "!": invoke,
-    "O": new_object(Unit, Unit),
-    "object": new_object(Unit, Unit),
-    "bakevars": bake_vars,
-    "%": typecheck,
-    "!%": not_typecheck,
-    "`": construct,
-    "id": lambda a, b: a,
-
-    "cpush":   [reset],
-    "cpop":    [shift],
-    "load":    [load],
-
-    "showenv": [lambda a, b, env, cstack: (Leaf(TT.OBJECT, env), env, cstack)],
-    "@":       [at],
-    "$":       [lambda a, b, env, cstack: (env.lookup(b.w, a), env, cstack)],
-    "as":      [lambda a, b, env, cstack: (env.bind(b.w, a), env, cstack)],
-    "assign":  [lambda a, b, env, cstack: (env.assign(b.w, a), env, cstack)],
-    "is":      [lambda a, b, env, cstack: (env.assign(a.w, b), env, cstack)],
-    "func":    [makefunc],
-}
 
 
 def tt2env(tt, env):
@@ -715,6 +671,59 @@ def asmod_tree(a, b, env):
     d = {a.L.w: a.R}
     return Leaf(TT.OBJECT, Env(env, from_dict=d))
 
+
+class Some:
+
+    def __init__(self, x):
+        self.value = x
+
+    def __str__(self):
+        return f"Some({self.value})"
+
+
+BUILTINS = {
+    "=": eq,
+    "T": get_type,
+    "type": get_type,
+    "retype": lambda a, b: Leaf(b.w, a.w),
+    "sametype": lambda a, b: Leaf(TT.NUM, 1 if a.tt == b.tt else 0),
+    "dispatch": set_dispatch,
+    "til": lambda a, b: Leaf("range", (a.w, 1, b.w)),
+    "enumerate": lambda a, b: Leaf("range", (0, 1, a.w)),
+    "if": lambda a, b: unwrap(a.L),
+    "not": lambda a, b: Leaf(TT.NUM, 1 - a.w), # TODO doesn't play with unit ()
+    "then": lambda a, b: if_(b, a),
+    ";": lambda a, b: b,
+    "bake": bake,
+    "open": lambda a, _: unwrap(a),
+    "unwrap": lambda a, _: unwrap(a),
+    ",": lambda a, b: Leaf("vec", [a, b]),
+    "tovec": lambda a, b: Leaf("vec", [a]),
+    "print": print_fn,
+    "wait": wait,
+    "!": invoke,
+    "O": new_object(Unit, Unit),
+    "object": new_object(Unit, Unit),
+    "bakevars": bake_vars,
+    "%": typecheck,
+    "!%": not_typecheck,
+    "`": construct,
+    "id": lambda a, b: a,
+
+    "cpush":   [reset],
+    "cpop":    [shift],
+    "load":    [load],
+
+    "showenv": [lambda a, b, env, cstack: (Leaf(TT.OBJECT, env), env, cstack)],
+    "@":       [at],
+    "$":       [lambda a, b, env, cstack: (env.lookup(b.w, a), env, cstack)],
+    "as":      [lambda a, b, env, cstack: (env.bind(b.w, a), env, cstack)],
+    "assign":  [lambda a, b, env, cstack: (env.assign(b.w, a), env, cstack)],
+    "is":      [lambda a, b, env, cstack: (env.assign(a.w, b), env, cstack)],
+    "func":    [makefunc],
+}
+
+
 modules = {
     "range": {
         ("+", TT.NUM): lambda a, b: Leaf("range", (a.w[0] + b.w, a.w[1], a.w[2] + b.w)),
@@ -804,6 +813,16 @@ modules = {
     TT.THUNK: {
         "asmod": lambda a, b: Tree(unwrap(a), Leaf(TT.SYMBOL, "asmod"), Unit),
     },
+    TT.UNIT: {
+        ">>": lambda a, b: a,
+        "?": lambda a, b: unwrap(b.R),
+    },
+    "Some": {
+        ".": lambda a, b: Leaf("Some", Some(a)),
+        ">>": lambda a, b: Tree(a.w.value, b, Unit), # TODO define this generically in some parent functor?
+        (">>", TT.TREE): lambda a, b: Tree(a.w.value, b.L, b.R),
+        # ("+>", TT.TREE): lambda a, b: Tree(Tree(a, Leaf(TT.PUNCTUATION, ">>"), b), Leaf(TT.SYMBOL, "Some"), Unit),
+    },
 }
 
 def as_module(mod_dict):
@@ -840,17 +859,10 @@ def Execute(code, env, cstack):
 
 def prepare_env():
     mods = {k: Leaf(TT.OBJECT, Env(None, from_dict=as_module(mod)))
-            for k, mod
-            in {
-                **modules,
-                **functors.modules,
-            }.items()}
+            for k, mod in modules.items()}
 
     rootenv = Env(None, from_dict={
-        **as_module({
-            **BUILTINS,
-            **functors.builtins,
-        }),
+        **as_module(BUILTINS),
         **mods,
     })
 

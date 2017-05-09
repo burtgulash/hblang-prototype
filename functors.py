@@ -32,14 +32,4 @@ builtins = {
 # .$x >>= a: [.$y >>= b: [.$a / .$b]]
 
 modules = {
-    TT.UNIT: {
-        ">>": lambda a, b: a,
-        "?": lambda a, b: unwrap(b.R),
-    },
-    "Some": {
-        ".": lambda a, b: Leaf("Some", Some(a)),
-        ">>": lambda a, b: Tree(a.w.value, b, Unit), # TODO define this generically in some parent functor?
-        (">>", TT.TREE): lambda a, b: Tree(a.w.value, b.L, b.R),
-        # ("+>", TT.TREE): lambda a, b: Tree(Tree(a, Leaf(TT.PUNCTUATION, ">>"), b), Leaf(TT.SYMBOL, "Some"), Unit),
-    },
 }
