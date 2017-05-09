@@ -247,7 +247,8 @@ def quote(x, paren_type):
     if paren_type == '[':
         x = Leaf(TT.THUNK, x)
     elif paren_type == '{':
-        x = Leaf(TT.FUNCTION_STUB, x)
+        # x = Leaf(TT.FUNCTION_STUB, x)
+        x = Tree(Leaf(TT.THUNK, x), Leaf(TT.SYMBOL, "func"), Unit)
     return x
 
 

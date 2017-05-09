@@ -86,7 +86,7 @@ def bakevars(x, vars):
 #            body = bakevars(x.w.body, vars)
 #            x = x.clone(body)
         x = Tree(L, H, R)
-    elif x.tt == TT.THUNK:
+    elif x.tt in (TT.THUNK, TT.FUNCTION_STUB):
         x = Leaf(x.tt, bakevars(unwrap(x), vars))
     elif x.tt == TT.FUNCTION:
         body = bakevars(x.w.body, vars)
@@ -510,40 +510,7 @@ def Eval(x, env, cstack):
             elif H.tt in (TT.PUNCTUATION, TT.CONS, TT.SYMBOL,
                           TT.STRING, TT.SEPARATOR):
                 fn = H.w
-                op = None
-
-                # separator as fallback if no TCO? TODO remove it
-                # Dispatch on left symbol (like a method)
-                dispatch_env = env.lookup(L.tt, None)
-                # print("DENV", L.tt, dispatch_env, file=sys.stderr)
-                if dispatch_env and dispatch_env.tt == TT.OBJECT:
-                    dispatch_env = dispatch_env.w
-                else:
-                    dispatch_env = env
-
-                # print("DISPATCH ON", L.tt, fn, R.tt, file=sys.stderr)
-                # print("DISPTACH ENV", dispatch_env, file=sys.stderr)
-                # print("", file=sys.stderr)
-                if op is None:
-                    # Dispatch on L.type and R.type
-                    dispatch_str = f"{fn}:{R.tt}"
-                    op = dispatch_env.lookup(dispatch_str, None)
-                if op is None:
-                    # Dispatch on L.type and Fn name
-                    dispatch_str = f"{fn}"
-                    op = dispatch_env.lookup(dispatch_str, None)
-                if op is None:
-                    op = env.lookup(fn, None)
-                if op is None:
-                    raise NoDispatch(f"Can't dispatch {fn} on {L.tt}:{R.tt}")
-                # print("LOOKUPED", fn, L.tt, op, type(op), op.tt, file=sys.stderr)
-                if op.tt not in (TT.CONTINUATION, TT.SPECIAL,
-                                 TT.FUNCTION, TT.FUNCTION_STUB, # TT.CLOSURE,
-                                 TT.BUILTIN, TT.THUNK, TT.SYMBOL, TT.PUNCTUATION,
-                                 TT.OBJECT # dispatch on module/object -> find constructor
-                ):
-                    raise TypeError(f"Dispatched op '{op.tt}' doesn't satisfy function-like types")
-                H = op
+                H = dispatch(fn, L.tt, R.tt, env)
                 ins = CT.Right
                 continue
             #elif H.tt == TT.CLOSURE:
@@ -578,6 +545,43 @@ def Eval(x, env, cstack):
             assert False
 
 
+def dispatch(fn, ltt, rtt, env):
+    # separator as fallback if no TCO? TODO remove it
+    # Dispatch on left symbol (like a method)
+    dispatch_env = env.lookup(ltt, None)
+    # print("DENV", L.tt, dispatch_env, file=sys.stderr)
+    if dispatch_env and dispatch_env.tt == TT.OBJECT:
+        dispatch_env = dispatch_env.w
+    else:
+        dispatch_env = env
+
+    # print("DISPATCH ON", ltt, fn, rtt, file=sys.stderr)
+    # print("DISPTACH ENV", dispatch_env, file=sys.stderr)
+    # print("", file=sys.stderr)
+    # Dispatch on L.type and R.type
+
+    dispatch_str = f"{fn}:{rtt}"
+    op = dispatch_env.lookup(dispatch_str, None)
+
+    if op is None:
+        # Dispatch on L.type and Fn name
+        dispatch_str = f"{fn}"
+        op = dispatch_env.lookup(dispatch_str, None)
+    if op is None:
+        op = env.lookup(fn, None)
+    if op is None:
+        raise NoDispatch(f"Can't dispatch {fn} on {ltt}:{rtt}")
+    # print("LOOKUPED", fn, L.tt, op, type(op), op.tt, file=sys.stderr)
+    if op.tt not in (TT.CONTINUATION, TT.SPECIAL,
+                     TT.FUNCTION, TT.FUNCTION_STUB, # TT.CLOSURE,
+                     TT.BUILTIN, TT.THUNK, TT.SYMBOL, TT.PUNCTUATION,
+                     TT.OBJECT # dispatch on module/object -> find constructor
+    ):
+        raise TypeError(f"Dispatched op '{op.tt}' doesn't satisfy function-like types")
+
+    return op
+
+
 def left(a, b, env):
     return a
 
@@ -586,7 +590,16 @@ def right(a, b, env):
     return b
 
 
-def fold(a, b):
+def fold(a, b, env, cstack):
+    assert len(a.w) > 0
+    f = b
+    acc = a.w[0]
+    for x in a.w[1:]:
+        acc, _, _ = Eval(Tree(acc, f, x), env, cstack)
+    return acc, env, cstack
+
+
+def num_fold(a, b):
     if isinstance(b, Tree):
         zero = b.R.w
         op = b.L.w
@@ -674,7 +687,7 @@ def eachright(a, b, env, cstack):
 def num_eachright(a, b, env, cstack):
     assert b.tt == TT.TREE
     f, Rs = b.L, b.R
-    v = [Eval(Tree(a, f, Leaf(TT.NUM, x)), env, cstack)[0].w for x in Rs.w]
+    v = [Eval(Tree(a, f, Leaf(TT.NUM, x)), env, cstack)[0] for x in Rs.w]
     return Leaf("vec", v), env, cstack
 
 
@@ -696,7 +709,6 @@ def asmod_tree(a, b, env):
     d = {a.L.w: a.R}
     return Leaf(TT.OBJECT, Env(env, from_dict=d))
 
-
 modules = {
     "range": {
         ("+", TT.NUM): lambda a, b: Leaf("range", (a.w[0] + b.w, a.w[1], a.w[2] + b.w)),
@@ -704,19 +716,20 @@ modules = {
         ("*", TT.NUM): lambda a, b: Leaf("range", (a.w[0] * b.w, a.w[1] * b.w, a.w[2] * b.w)),
         # Division needs to convert to vec and then divide, otherwise lossy
         "tovec": lambda a, b: Leaf("num_vec", list(range(a.w[0], a.w[2], a.w[1]))),
-        "fold": lambda a, b: Tree(Tree(a, Leaf(TT.SYMBOL, "tovec"), Unit), Leaf(TT.SYMBOL, "fold"), b),
-        "scan": lambda a, b: Tree(Tree(a, Leaf(TT.SYMBOL, "tovec"), Unit), Leaf(TT.SYMBOL, "scan"), b),
+        # "fold": lambda a, b: Tree(Tree(a, Leaf(TT.SYMBOL, "tovec"), Unit), Leaf(TT.SYMBOL, "fold"), b),
+        # "scan": lambda a, b: Tree(Tree(a, Leaf(TT.SYMBOL, "tovec"), Unit), Leaf(TT.SYMBOL, "scan"), b),
         "sum": lambda a, b: Leaf(TT.NUM, arithmetic_series_sum(a.w[0], a.w[2], a.w[1])),
         "len": lambda a, b: Leaf(TT.NUM, (a.w[2] - 1 - a.w[0]) // a.w[1] + 1),
         "each": lambda a, b: Tree(Tree(a, Leaf(TT.SYMBOL, "tovec"), Unit), Leaf(TT.SYMBOL, "each"), b),
     },
     "vec": {
         ",": lambda a, b: a.w.append(b) or a,
-        ("@", TT.NUM): lambda a, b: Leaf(TT.NUM, a.w[b.w]),
+        ("@", TT.NUM): lambda a, b: a.w[b.w],
         "len": lambda a, b: Leaf(TT.NUM, len(a.w)),
         "asmod": asmod_vec,
         "each": [each],
         "eachright": [eachright],
+        "fold": [fold],
     },
     "num_vec": {
         "each": [num_each],
@@ -734,7 +747,7 @@ modules = {
         ("/", TT.NUM): lambda a, b: Leaf("num_vec", [x // b.w for x in a.w]),
         ("@", TT.NUM): lambda a, b: Leaf(TT.NUM, a.w[b.w]),
         "sum": lambda a, b: Leaf(TT.NUM, sum(a.w)),
-        "fold": fold,
+        "fold": num_fold,
         "scan": scan,
     },
     TT.TREE: {
@@ -762,13 +775,13 @@ modules = {
         (">=", TT.NUM): lambda a, b: Leaf(TT.NUM, 1 if a.w >= b.w else 0),
     },
     TT.SYMBOL: {
-        ("^", TT.SYMBOL): lambda a, b: Leaf(a.tt, a.w + b.w),
-        ("^", TT.STRING): lambda a, b: Leaf(a.tt, a.w + b.w),
+        ("~", TT.SYMBOL): lambda a, b: Leaf(a.tt, a.w + b.w),
+        ("~", TT.STRING): lambda a, b: Leaf(a.tt, a.w + b.w),
     },
     TT.STRING: {
         ("*", TT.NUM): lambda a, b: Leaf(a.tt, a.w * b.w),
-        ("^", TT.STRING): lambda a, b: Leaf(a.tt, a.w + b.w),
-        ("^", TT.SYMBOL): lambda a, b: Leaf(a.tt, a.w + b.w),
+        ("~", TT.STRING): lambda a, b: Leaf(a.tt, a.w + b.w),
+        ("~", TT.SYMBOL): lambda a, b: Leaf(a.tt, a.w + b.w),
     },
     TT.FUNCTION: {
         # ("dispatch", TT.TREE): lambda a, b, env: set_dispatch(a, b, env), # TODO special
