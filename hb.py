@@ -640,18 +640,7 @@ def scan(a, b):
     return Leaf("vec", r)
 
 
-#def eachright(a, b, env):
-#    v = []
-#    for x in b.R.w:
-#        if isinstance(x, int):
-#            x = Leaf(TT.NUM, x)
-#        print("TY", a.tt,x.tt, Tree(a, b.L, x))
-#        y, _ = Eval(Tree(a, b.L, x), env)
-#        v.append(y)
-#    return Leaf("vec", v)
-#
-#
-def each(a, b, env, cstack):
+def each_prep(b):
     if b.tt == TT.TREE:
         f, R = b.L, b.R
     else:
@@ -660,21 +649,33 @@ def each(a, b, env, cstack):
     if f.tt == TT.FUNCTION_STUB:
         f = makefunc_(f, env)
 
+    return f, R
+
+
+def each(a, b, env, cstack):
+    f, R = each_prep(b)
     v = [Eval(Tree(x, f, R), env, cstack)[0] for x in a.w]
     return Leaf("vec", v), env, cstack
 
 
 def num_each(a, b, env, cstack):
-    if b.tt == TT.TREE:
-        f, R = b.L, b.R
-    else:
-        f, R = b, Unit
-
-    if f.tt == TT.FUNCTION_STUB:
-        f = makefunc_(f, env)
-
+    f, R = each_prep(b)
     v = [Eval(Tree(Leaf(TT.NUM, x), f, R), env, cstack)[0].w for x in a.w]
-    return Leaf(a.tt, v), env, cstack
+    return Leaf("num_vec", v), env, cstack
+
+
+def eachright(a, b, env, cstack):
+    assert b.tt == TT.TREE
+    f, Rs = b.L, b.R
+    v = [Eval(Tree(a, f, x), env, cstack)[0] for x in Rs.w]
+    return Leaf("vec", v), env, cstack
+
+
+def num_eachright(a, b, env, cstack):
+    assert b.tt == TT.TREE
+    f, Rs = b.L, b.R
+    v = [Eval(Tree(a, f, Leaf(TT.NUM, x)), env, cstack)[0].w for x in Rs.w]
+    return Leaf("vec", v), env, cstack
 
 
 def arithmetic_series_sum(a, b, by):
@@ -715,10 +716,11 @@ modules = {
         "len": lambda a, b: Leaf(TT.NUM, len(a.w)),
         "asmod": asmod_vec,
         "each": [each],
+        "eachright": [eachright],
     },
     "num_vec": {
-        #"eachright": eachright,
         "each": [num_each],
+        "eachright": [num_eachright],
         "len": lambda a, b: Leaf(TT.NUM, len(a.w)),
         ("+", "num_vec"): lambda a, b: Leaf("num_vec", [x + y for x, y in zip(a.w, b.w)]),
         ("-", "num_vec"): lambda a, b: Leaf("num_vec", [x - y for x, y in zip(a.w, b.w)]),
