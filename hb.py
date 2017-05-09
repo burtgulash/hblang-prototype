@@ -839,24 +839,6 @@ def Execute(code, env, cstack):
 
 
 def prepare_env():
-    builtins = {k: Leaf(TT.BUILTIN, x)
-                for k, x
-                in {
-                    **BUILTINS,
-                    **functors.builtins,
-                }.items()
-                if not isinstance(x, list)
-    }
-    special = {k: Leaf(TT.SPECIAL, x[0])
-               for k, x
-               in {
-                   **BUILTINS,
-                   **functors.builtins,
-               }.items()
-               if isinstance(x, list)
-    }
-
-    # dispatches = {DISPATCH_SEP.join(map(str, k)): Leaf(TT.BUILTIN, v) for k, v in dispatch.items()}
     mods = {k: Leaf(TT.OBJECT, Env(None, from_dict=as_module(mod)))
             for k, mod
             in {
@@ -864,15 +846,16 @@ def prepare_env():
                 **functors.modules,
             }.items()}
 
-
-    # TODO prevent constructor and module clashes
-    env = Env(None, from_dict={
+    rootenv = Env(None, from_dict={
+        **as_module({
+            **BUILTINS,
+            **functors.builtins,
+        }),
         **mods,
-        **builtins,
-        **special,
     })
-    # env = Env(env)  # dummy env
-    return env
+
+    # rootenv = Env(rootenv)  # dummy env
+    return rootenv
 
 
 def Repl(env, rstack, prompt="> "):
