@@ -10,7 +10,7 @@ from stack import Cactus, CT, Frame
 import functors
 
 
-SELF_F = "f"
+SELF_F = "F"
 DISPATCH_SEP = ":"
 
 
@@ -112,8 +112,8 @@ def makefunc_(a, env):
         if header.tt == TT.TREE:
             left_name, right_name = header.L, header.R
             if not (left_name.tt == right_name.tt == TT.SYMBOL):
-                raise Exception(f"Function parameter names need to by symbols."
-                                f" Given '{left_name.tt}' : '{right_name.tt}'")
+                raise TypecheckError(f"Function parameter names need to by symbols."
+                                     f" Given '{left_name.tt}' : '{right_name.tt}'")
             left_name, right_name = left_name.w, right_name.w
             body = body.R
 
@@ -126,8 +126,8 @@ def load(a, b, env, cstack):
         code = f.read()
     # print(f"CODE: '{code}'", file=sys.stderr)
 
-    x, env, cstack = Execute(code, env, cstack)
-    return Leaf(TT.OBJECT, env), env, cstack
+    _, module, _ = Execute(code, Env(env), cstack)
+    return Leaf(TT.OBJECT, module), env, cstack
 
 
 def reset(a, b, env, cstack):
@@ -340,7 +340,7 @@ BUILTINS = {
     "open": lambda a, _: unwrap(a),
     "unwrap": lambda a, _: unwrap(a),
     ",": lambda a, b: Leaf("vec", [a, b]),
-    "tovec": lambda a, _: Leaf("vec", []),
+    "tovec": lambda a, b: Leaf("vec", [a]),
     "print": print_fn,
     "wait": wait,
     "!": invoke,
@@ -680,6 +680,8 @@ def num_each(a, b, env, cstack):
 def eachright(a, b, env, cstack):
     assert b.tt == TT.TREE
     f, Rs = b.L, b.R
+    if Rs.tt not in ("vec", "num_vec"):
+        raise TypecheckError("Right argument is not a vector")
     v = [Eval(Tree(a, f, x), env, cstack)[0] for x in Rs.w]
     return Leaf("vec", v), env, cstack
 
@@ -687,6 +689,8 @@ def eachright(a, b, env, cstack):
 def num_eachright(a, b, env, cstack):
     assert b.tt == TT.TREE
     f, Rs = b.L, b.R
+    if Rs.tt not in ("vec", "num_vec"):
+        raise TypecheckError("Right argument is not a vector")
     v = [Eval(Tree(a, f, Leaf(TT.NUM, x)), env, cstack)[0] for x in Rs.w]
     return Leaf("vec", v), env, cstack
 
@@ -763,6 +767,9 @@ modules = {
         ("@", TT.SYMBOL): lambda a, b: a.w.lookup(b.w, Unit),
     },
     TT.NUM: {
+        "tovec": lambda a, b: Leaf("num_vec", [a.w]),
+        "rep": lambda a, b: Leaf("vec", [b] * a.w),
+        ("rep", TT.NUM): lambda a, b: Leaf("num_vec", [b.w] * a.w),
         (",", TT.NUM): lambda a, b: Leaf("num_vec", [a.w, b.w]),
         ("+", TT.NUM): lambda a, b: Leaf(TT.NUM, a.w + b.w),
         ("-", TT.NUM): lambda a, b: Leaf(TT.NUM, a.w - b.w),
