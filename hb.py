@@ -278,7 +278,8 @@ def at(a, b, env, cstack):
         e = env.lookup(":", None) # TODO check if some focka didn't delete it
     else:
         e = env.lookup(env_name, None)
-        assert e.tt == TT.OBJECT
+        if e is None or e.tt != TT.OBJECT:
+            raise TypecheckError(f"Expected OBJECT, got '{type(e).__name__}'")
         e = e.w # unwrap object to env
 
     # print(e.e)
@@ -384,7 +385,7 @@ def Eval(x, env, cstack):
                 continue
             # print("H", type(H), H)
             if H.tt == TT.SEPARATOR:
-                # Tail recurse on separator ';' before R gets evaluated
+                # Tail recurse on separator '|' before R gets evaluated
                 x, ins = R, next_ins(R)
                 continue
             if ins < CT.Right and isinstance(R, Tree):
@@ -634,24 +635,6 @@ def num_each(a, b, env, cstack):
     return Leaf("num_vec", v), env, cstack
 
 
-def eachright(a, b, env, cstack):
-    assert b.tt == TT.TREE
-    f, Rs = b.L, b.R
-    if Rs.tt not in ("vec", "num_vec"):
-        raise TypecheckError("Right argument is not a vector")
-    v = [Eval(Tree(a, f, x), env, cstack)[0] for x in Rs.w]
-    return Leaf("vec", v), env, cstack
-
-
-def num_eachright(a, b, env, cstack):
-    assert b.tt == TT.TREE
-    f, Rs = b.L, b.R
-    if Rs.tt not in ("vec", "num_vec"):
-        raise TypecheckError("Right argument is not a vector")
-    v = [Eval(Tree(a, f, Leaf(TT.NUM, x)), env, cstack)[0] for x in Rs.w]
-    return Leaf("vec", v), env, cstack
-
-
 def arithmetic_series_sum(a, b, by):
     n = (b - a) // by + 1
     return (by * n * (n - 1) // 2) + (n * a)
@@ -671,6 +654,10 @@ def asmod_tree(a, b, env, cstack):
     return Leaf(TT.OBJECT, Env(env, from_dict=d)), env, cstack
 
 
+def zip_(a, b):
+    return Leaf(a.tt, [Tree(x, Leaf(TT.CONS, ":"), y) for x, y in zip(a.w, b.w)])
+
+
 class Some:
 
     def __init__(self, x):
@@ -682,6 +669,8 @@ class Some:
 
 BUILTINS = {
     "=": eq,
+    "==": eq,
+    "!=": lambda a, b: Leaf(TT.NUM, 1 - eq(a, b).w),
     "T": get_type,
     "type": get_type,
     "retype": lambda a, b: Leaf(b.w, a.w),
@@ -692,10 +681,10 @@ BUILTINS = {
     "if": lambda a, b: unwrap(a.L),
     "not": lambda a, b: Leaf(TT.NUM, 1 - a.w), # TODO doesn't play with unit ()
     "then": lambda a, b: if_(b, a),
-    ";": lambda a, b: b,
     "bake": bake,
     "open": lambda a, _: unwrap(a),
     "unwrap": lambda a, _: unwrap(a),
+    "emptyvec": lambda a, b: Leaf("vec", []),
     ",": lambda a, b: Leaf("vec", [a, b]),
     "tovec": lambda a, b: Leaf("vec", [a]),
     "print": print_fn,
@@ -739,18 +728,17 @@ modules = {
     },
     "vec": {
         ",": lambda a, b: a.w.append(b) or a,
-        ("~", "vec"): lambda a, b: a.w + b.w,
+        ("~", "vec"): lambda a, b: Leaf("vec", a.w + b.w),
         ("@", TT.NUM): lambda a, b: a.w[b.w],
         "len": lambda a, b: Leaf(TT.NUM, len(a.w)),
         "asmod": [asmod_vec],
         "each": [each],
-        # "eachright": [eachright],
         "fold": [fold],
+        ("zip", "vec"): zip_,
     },
     "num_vec": {
-        ("~", "num_vec"): lambda a, b: a.w + b.w,
+        ("~", "num_vec"): lambda a, b: Leaf("num_vec", a.w + b.w),
         "each": [num_each],
-        # "eachright": [num_eachright],
         "len": lambda a, b: Leaf(TT.NUM, len(a.w)),
         ("+", "num_vec"): lambda a, b: Leaf("num_vec", [x + y for x, y in zip(a.w, b.w)]),
         ("-", "num_vec"): lambda a, b: Leaf("num_vec", [x - y for x, y in zip(a.w, b.w)]),
@@ -781,8 +769,8 @@ modules = {
     },
     TT.NUM: {
         "tovec": lambda a, b: Leaf("num_vec", [a.w]),
-        "rep": lambda a, b: Leaf("vec", [b] * a.w),
-        ("rep", TT.NUM): lambda a, b: Leaf("num_vec", [b.w] * a.w),
+        "rrep": lambda a, b: Leaf("vec", [b] * a.w),
+        # ("rep", TT.NUM): lambda a, b: Leaf("num_vec", [b.w] * a.w),
         (",", TT.NUM): lambda a, b: Leaf("num_vec", [a.w, b.w]),
         ("+", TT.NUM): lambda a, b: Leaf(TT.NUM, a.w + b.w),
         ("-", TT.NUM): lambda a, b: Leaf(TT.NUM, a.w - b.w),
@@ -793,6 +781,9 @@ modules = {
         ("<=", TT.NUM): lambda a, b: Leaf(TT.NUM, 1 if a.w <= b.w else 0),
         (">", TT.NUM): lambda a, b: Leaf(TT.NUM, 1 if a.w > b.w else 0),
         (">=", TT.NUM): lambda a, b: Leaf(TT.NUM, 1 if a.w >= b.w else 0),
+        ("and", TT.NUM): lambda a, b: Leaf(TT.NUM, 1 if 0 not in (a.w, b.w) else 0),
+        ("or", TT.NUM): lambda a, b: Leaf(TT.NUM, 1 if 1 in (a.w, b.w) else 0),
+        ("not", TT.NUM): lambda a, b: Leaf(TT.NUM, 1 if a.w == 0 else 0),
     },
     TT.SYMBOL: {
         ("~", TT.SYMBOL): lambda a, b: Leaf(a.tt, a.w + b.w),
@@ -806,7 +797,7 @@ modules = {
     },
     TT.FUNCTION: {
         # ("dispatch", TT.TREE): lambda a, b, env: set_dispatch(a, b, env), # TODO special
-        "asmod": lambda a, b: Tree(unwrap(a), Leaf(TT.SYMBOL, "asmod"), Unit),
+        # "asmod": lambda a, b: Tree(unwrap(a), Leaf(TT.SYMBOL, "asmod"), Unit),
     },
     TT.THUNK: {
         "asmod": lambda a, b: Tree(unwrap(a), Leaf(TT.SYMBOL, "asmod"), Unit),
