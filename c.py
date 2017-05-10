@@ -47,8 +47,6 @@ class Leaf:
     def __repr__(self):
         if self.tt == TT.FUNCTION:
             return "{" + str(self.w) + "}"
-        if self.tt == TT.FUNCTION_STUB:
-            return "{" + str(self.w) + "}"
         if self.tt == TT.THUNK:
             return f"[{self.w}]"
         if self.tt in (TT.PUNCTUATION, TT.NUM, TT.CONS,
@@ -104,13 +102,12 @@ class TT(Enum):
     FUNCTION = 12
     BUILTIN = 13
     END = 14
-    FUNCTION_STUB = 15
-    NEWLINE = 16
-    CONTINUATION = 17
-    SPECIAL = 18
-    TREE = 19
-    OBJECT = 20
-    CONS = 21
+    NEWLINE = 15
+    CONTINUATION = 16
+    SPECIAL = 17
+    TREE = 18
+    OBJECT = 19
+    CONS = 20
 
     def __str__(self):
         return self.name
@@ -247,7 +244,6 @@ def quote(x, paren_type):
     if paren_type == '[':
         x = Leaf(TT.THUNK, x)
     elif paren_type == '{':
-        # x = Leaf(TT.FUNCTION_STUB, x)
         x = Tree(Leaf(TT.THUNK, x), Leaf(TT.SYMBOL, "func"), Unit)
     return x
 

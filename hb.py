@@ -80,12 +80,8 @@ def bakevars(x, vars):
         H = x.H
         if isinstance(H, Tree):
             H = bakevars(H, vars)
-        # if H.tt == TT.FUNCTION_STUB:
-            # TODO precompile here? or in invocation time?
-#            body = bakevars(x.w.body, vars)
-#            x = x.clone(body)
         x = Tree(L, H, R)
-    elif x.tt in (TT.THUNK, TT.FUNCTION_STUB):
+    elif x.tt == TT.THUNK:
         x = Leaf(x.tt, bakevars(unwrap(x), vars))
     elif x.tt == TT.FUNCTION:
         body = bakevars(x.w.body, vars)
@@ -100,7 +96,7 @@ def makefunc(a, b, env, cstack):
 
 
 def makefunc_(a, env):
-    if a.tt not in (TT.FUNCTION_STUB, TT.THUNK):
+    if a.tt != TT.THUNK:
         raise Exception(f"Can't create function out of '{a.tt}'")
 
     body = a.w
@@ -129,6 +125,17 @@ def load(a, b, env, cstack):
     if module is None:
         raise TypecheckError("Module can't be NULL")
     return Leaf(TT.OBJECT, module), env, cstack
+
+
+def import_(a, b, env, cstack):
+    with open(b.w) as f:
+        code = f.read()
+    # print(f"CODE: '{code}'", file=sys.stderr)
+
+    _, module, _ = Execute(code, env, cstack)
+    if module is None:
+        raise TypecheckError("Module can't be NULL")
+    return Unit, env, cstack
 
 
 def reset(a, b, env, cstack):
@@ -165,8 +172,8 @@ def get_type(a, b):
 
 def unwrap(H):
     if H.tt == TT.FUNCTION:
-        return H.body
-    if H.tt in (TT.FUNCTION_STUB, TT.THUNK):
+        return H.w.body
+    if H.tt == TT.THUNK:
         return H.w
     return H
 
@@ -412,10 +419,6 @@ def Eval(x, env, cstack):
                 x = unwrap(H)
                 ins = next_ins(x)
                 continue
-            elif H.tt == TT.FUNCTION_STUB:
-                H = Tree(H, Leaf(TT.SPECIAL, makefunc), Unit)
-                ins = CT.Left
-                continue
             elif H.tt == TT.FUNCTION:
                 func = H.w
 
@@ -446,8 +449,7 @@ def Eval(x, env, cstack):
                 if op is None:
                     raise NoDispatch(f"Can't find module function {H} on L: {L.tt}")
                 assert op.tt in (TT.CONTINUATION, TT.SPECIAL,
-                                 TT.FUNCTION, TT.FUNCTION_STUB, # TT.CLOSURE,
-                                 TT.BUILTIN, TT.THUNK)
+                                 TT.FUNCTION, TT.BUILTIN, TT.THUNK)
                 H = op
                 ins = CT.Right
                 continue
@@ -531,7 +533,7 @@ def dispatch(fn, ltt, rtt, env):
         raise NoDispatch(f"Can't dispatch {fn} on {ltt}:{rtt}")
     # print("LOOKUPED", fn, L.tt, op, type(op), op.tt, file=sys.stderr)
     if op.tt not in (TT.CONTINUATION, TT.SPECIAL,
-                     TT.FUNCTION, TT.FUNCTION_STUB, # TT.CLOSURE,
+                     TT.FUNCTION,
                      TT.BUILTIN, TT.THUNK, TT.SYMBOL, TT.PUNCTUATION,
                      TT.OBJECT # dispatch on module/object -> find constructor
     ):
@@ -617,9 +619,6 @@ def each_prep(b):
     else:
         f, R = b, Unit
 
-    if f.tt == TT.FUNCTION_STUB:
-        f = makefunc_(f, env)
-
     return f, R
 
 
@@ -654,22 +653,22 @@ def num_eachright(a, b, env, cstack):
 
 
 def arithmetic_series_sum(a, b, by):
-    n = (b - 1 - a) // by + 1
+    n = (b - a) // by + 1
     return (by * n * (n - 1) // 2) + (n * a)
 
 
-def asmod_vec(a, b, env):
+def asmod_vec(a, b, env, cstack):
     d = {}
     for item in a.w:
         assert item.tt == TT.TREE
         assert item.L.tt in (TT.SYMBOL, TT.STRING)
         d[item.L.w] = item.R
-    return Leaf(TT.OBJECT, Env(env, from_dict=d))
+    return Leaf(TT.OBJECT, Env(env, from_dict=d)), env, cstack
 
-def asmod_tree(a, b, env):
+def asmod_tree(a, b, env, cstack):
     assert a.L.tt in (TT.SYMBOL, TT.STRING)
     d = {a.L.w: a.R}
-    return Leaf(TT.OBJECT, Env(env, from_dict=d))
+    return Leaf(TT.OBJECT, Env(env, from_dict=d)), env, cstack
 
 
 class Some:
@@ -713,6 +712,7 @@ BUILTINS = {
     "cpush":   [reset],
     "cpop":    [shift],
     "load":    [load],
+    "import":    [import_],
 
     "showenv": [lambda a, b, env, cstack: (Leaf(TT.OBJECT, env), env, cstack)],
     "@":       [at],
@@ -730,11 +730,11 @@ modules = {
         ("-", TT.NUM): lambda a, b: Leaf("range", (a.w[0] - b.w, a.w[1], a.w[2] - b.w)),
         ("*", TT.NUM): lambda a, b: Leaf("range", (a.w[0] * b.w, a.w[1] * b.w, a.w[2] * b.w)),
         # Division needs to convert to vec and then divide, otherwise lossy
-        "tovec": lambda a, b: Leaf("num_vec", list(range(a.w[0], a.w[2], a.w[1]))),
+        "tovec": lambda a, b: Leaf("num_vec", list(range(a.w[0], a.w[2] + 1, a.w[1]))),
         # "fold": lambda a, b: Tree(Tree(a, Leaf(TT.SYMBOL, "tovec"), Unit), Leaf(TT.SYMBOL, "fold"), b),
         # "scan": lambda a, b: Tree(Tree(a, Leaf(TT.SYMBOL, "tovec"), Unit), Leaf(TT.SYMBOL, "scan"), b),
         "sum": lambda a, b: Leaf(TT.NUM, arithmetic_series_sum(a.w[0], a.w[2], a.w[1])),
-        "len": lambda a, b: Leaf(TT.NUM, (a.w[2] - 1 - a.w[0]) // a.w[1] + 1),
+        "len": lambda a, b: Leaf(TT.NUM, (a.w[2] - a.w[0]) // a.w[1] + 1),
         "each": lambda a, b: Tree(Tree(a, Leaf(TT.SYMBOL, "tovec"), Unit), Leaf(TT.SYMBOL, "each"), b),
     },
     "vec": {
@@ -742,7 +742,7 @@ modules = {
         ("~", "vec"): lambda a, b: a.w + b.w,
         ("@", TT.NUM): lambda a, b: a.w[b.w],
         "len": lambda a, b: Leaf(TT.NUM, len(a.w)),
-        "asmod": asmod_vec,
+        "asmod": [asmod_vec],
         "each": [each],
         # "eachright": [eachright],
         "fold": [fold],
@@ -772,7 +772,7 @@ modules = {
         "L": lambda a, _: a.L,
         "H": lambda a, _: a.H,
         "R": lambda a, _: a.R,
-        "asmod": asmod_tree,
+        "asmod": [asmod_tree],
     },
     TT.OBJECT: {
         "clone": lambda a, b: Leaf(TT.OBJECT, a.w),
@@ -806,8 +806,6 @@ modules = {
     },
     TT.FUNCTION: {
         # ("dispatch", TT.TREE): lambda a, b, env: set_dispatch(a, b, env), # TODO special
-    },
-    TT.FUNCTION_STUB: {
         "asmod": lambda a, b: Tree(unwrap(a), Leaf(TT.SYMBOL, "asmod"), Unit),
     },
     TT.THUNK: {
