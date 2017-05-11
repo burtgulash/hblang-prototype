@@ -9,7 +9,7 @@ endif
 
 
 syn keyword hbContinuation cpush cpop
-syn keyword hbFunctionKeyword contained x y self
+syn keyword hbFunctionKeyword contained x y F
 
 syn match hbNumber "[_0-9]*"
 syn match hbSymbol "[a-zA-Z][a-zA-Z0-9_]*"
