@@ -483,17 +483,22 @@ def dispatch(fn, ltt, rtt, env):
     # print("", file=sys.stderr)
     # Dispatch on L.type and R.type
 
-    dispatch_str = f"{fn}:{rtt}"
-    op = dispatch_env.lookup(dispatch_str, None)
+    op = None
+    while True:
+        if op is None:
+            dispatch_str = f"{fn}:{rtt}"
+            op = dispatch_env.lookup(dispatch_str, None)
+        else: break
+        if op is None:
+            dispatch_str = f"{fn}"
+            op = dispatch_env.lookup(dispatch_str, None)
+        else: break
+        if op is None:
+            op = env.lookup(fn, None)
+        else: break
+        if op is None:
+            raise NoDispatch(f"Can't dispatch {fn} on {ltt}:{rtt}")
 
-    if op is None:
-        # Dispatch on L.type and Fn name
-        dispatch_str = f"{fn}"
-        op = dispatch_env.lookup(dispatch_str, None)
-    if op is None:
-        op = env.lookup(fn, None)
-    if op is None:
-        raise NoDispatch(f"Can't dispatch {fn} on {ltt}:{rtt}")
     # print("LOOKUPED", fn, L.tt, op, type(op), op.tt, file=sys.stderr)
     if op.tt not in (TT.CONTINUATION, TT.SPECIAL,
                      TT.FUNCTION,
