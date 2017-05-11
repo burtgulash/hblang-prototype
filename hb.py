@@ -73,20 +73,23 @@ class Function:
         # TODO ins accepts only Leafs and Trees, not Functions. Remove this?
         return TT.FUNCTION
 
+def bakevar(a, b):
+    if b.tt not in (TT.STRING, TT.SYMBOL):
+        raise TypecheckError(f"bakevar: Expected string | symbol. Got '{b.tt}'")
+    return bakevars(a, [b.w])
+
 
 def bakevars(x, vars):
     if isinstance(x, Tree):
-        L, R = bakevars(x.L, vars), bakevars(x.R, vars)
-        H = x.H
-        if isinstance(H, Tree):
-            H = bakevars(H, vars)
+        L, H, R = bakevars(x.L, vars), bakevars(x.H, vars), bakevars(x.R, vars)
         x = Tree(L, H, R)
     elif x.tt == TT.THUNK:
         x = Leaf(x.tt, bakevars(unwrap(x), vars))
     elif x.tt == TT.FUNCTION:
         body = bakevars(x.w.body, vars)
-        x = x.clone(body)
+        x = Leaf(x.tt, x.w.clone(body))
     elif x.tt == TT.SYMBOL and x.w in vars:
+        # NOTE: only bake on symbol, not on string. Otherwise you couldn't do assignments
         x = Tree(Unit, Leaf(TT.PUNCTUATION, "$"), x)
     return x
 
@@ -178,49 +181,8 @@ def unwrap(H):
     return H
 
 
-def bake_vars(a, _):
-    assert a.tt in (TT.FUNCTION, TT.THUNK)
-    return Leaf(a.tt, bake_vars_(unwrap(a)))
-
-
 def is_function(x):
     return x.tt in (TT.FUNCTION, TT.THUNK)
-
-
-def bake_vars_(x):
-    if isinstance(x, Tree):
-        L, R = bake_vars_(x.L), bake_vars_(x.R)
-        H = x.H
-        if isinstance(H, Tree) or is_function(H):
-            H = bake_vars_(H)
-        x = Tree(L, H, R)
-    elif is_function(x):
-        x = Leaf(x.tt, bake_vars_(unwrap(x)))
-    elif x.tt == TT.SYMBOL:
-        x = Tree(Leaf(TT.CONS, "."), Leaf(TT.PUNCTUATION, "$"), x)
-    return x
-
-
-def bake(a, b, env):
-     assert a.tt == TT.FUNCTION
-     assert b.tt in (TT.SYMBOL, TT.STRING)
-     return Leaf(a.tt, bake_(unwrap(a), b.w, env))
-
-
-def bake_(x, var, env):
-    if isinstance(x, Tree):
-        if isinstance(x.H, Leaf) and x.H.w == "$" and x.R.w == var:
-            return env.lookup(var, x.L)
-        return Tree(bake_(x.L, var, env), bake_(x.H, var, env), bake_(x.R, var, env))
-    elif x.tt == TT.THUNK:
-        return Leaf(x.tt, bake_(unwrap(x), var, env))
-    return x
-
-
-
-
-def invoke(a, b):
-    return Tree(a, b, Unit)
 
 
 def if_(a, b):
@@ -658,6 +620,18 @@ def zip_(a, b):
     return Leaf(a.tt, [Tree(x, Leaf(TT.CONS, ":"), y) for x, y in zip(a.w, b.w)])
 
 
+def order(a, b):
+    return Leaf(a.tt, [i for i, _ in sorted(enumerate(a.w), key=lambda x: x[1])])
+
+
+def choose(a, b):
+    new = [0] * len(b.w)
+    for i, pos in enumerate(b.w):
+        new[i] = a.w[pos]
+    return Leaf(a.tt, new)
+
+
+
 class Some:
 
     def __init__(self, x):
@@ -681,7 +655,7 @@ BUILTINS = {
     "if": lambda a, b: unwrap(a.L),
     "not": lambda a, b: Leaf(TT.NUM, 1 - a.w), # TODO doesn't play with unit ()
     "then": lambda a, b: if_(b, a),
-    "bake": bake,
+    # "bake": bake,
     "open": lambda a, _: unwrap(a),
     "unwrap": lambda a, _: unwrap(a),
     "emptyvec": lambda a, b: Leaf("vec", []),
@@ -689,10 +663,9 @@ BUILTINS = {
     "tovec": lambda a, b: Leaf("vec", [a]),
     "print": print_fn,
     "wait": wait,
-    "!": invoke,
     "O": new_object(Unit, Unit),
     "object": new_object(Unit, Unit),
-    "bakevars": bake_vars,
+    "bakevar": bakevar,
     "%": typecheck,
     "!%": not_typecheck,
     "`": construct,
@@ -754,6 +727,8 @@ modules = {
         "sum": lambda a, b: Leaf(TT.NUM, sum(a.w)),
         "fold": num_fold,
         "scan": scan,
+        "order": order,
+        ("@", "num_vec"): choose,
     },
     TT.TREE: {
         # "if": if_,
