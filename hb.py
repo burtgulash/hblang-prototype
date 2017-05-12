@@ -311,8 +311,8 @@ def tree2env(x, env):
 def path2env(path, env):
     for p in path:
         env = env.lookup(p, None)
-        if env.tt != TT.OBJECT:
-            raise UnexpectedType("Path2env expected OBJECT got {env.tt}")
+        if not env or env.tt != TT.OBJECT:
+            raise TypecheckError(f"Path2env expected OBJECT got {type(env) or env.tt}")
         env = env.w
     assert env is not None
     return env
@@ -519,10 +519,20 @@ def right(a, b, env):
 
 
 def fold(a, b, env, cstack):
-    assert len(a.w) > 0
-    f = b
-    acc = a.w[0]
-    for x in a.w[1:]:
+    if b.tt == TT.TREE:
+        f, R = b.L, b.R
+
+        acc = R
+        xs = a.w
+    else:
+        f, R = b, Unit
+
+        if len(a.w) == 0:
+            return R
+        acc = a.w[0]
+        xs = a.w[1:]
+
+    for x in xs:
         acc, _, _ = Eval(Tree(acc, f, x), env, cstack)
     return acc, env, cstack
 
@@ -598,8 +608,8 @@ def each(a, b, env, cstack):
 
 def num_each(a, b, env, cstack):
     f, R = each_prep(b)
-    v = [Eval(Tree(Leaf(TT.NUM, x), f, R), env, cstack)[0].w for x in a.w]
-    return Leaf("num_vec", v), env, cstack
+    v = [Eval(Tree(Leaf(TT.NUM, x), f, R), env, cstack)[0] for x in a.w]
+    return Leaf("vec", v), env, cstack
 
 
 def arithmetic_series_sum(a, b, by):
@@ -632,9 +642,15 @@ def order(a, b):
 def choose(a, b):
     new = [0] * len(b.w)
     for i, pos in enumerate(b.w):
+        # TODO handle out of bounds
         new[i] = a.w[pos]
     return Leaf(a.tt, new)
 
+
+def tap(a, b, env, cstack):
+    # Just for side effect
+    Eval(Tree(a, b, Unit), env, cstack)
+    return a, env, cstack
 
 
 class Some:
@@ -679,7 +695,8 @@ BUILTINS = {
     "cpush":   [reset],
     "cpop":    [shift],
     "load":    [load],
-    "import":    [import_],
+    "import":  [import_],
+    "tap":     [tap],
 
     "showenv": [lambda a, b, env, cstack: (Leaf(TT.OBJECT, env), env, cstack)],
     "@":       [at],
@@ -713,10 +730,11 @@ modules = {
         "each": [each],
         "fold": [fold],
         ("zip", "vec"): zip_,
+        ("@", "num_vec"): choose,
     },
     "num_vec": {
         ("~", "num_vec"): lambda a, b: Leaf("num_vec", a.w + b.w),
-        "each": [num_each],
+        "each": [lambda a, b, env, cstack: each(Leaf("num_vec", [Leaf(TT.NUM, x) for x in a.w]), b, env, cstack)],
         "len": lambda a, b: Leaf(TT.NUM, len(a.w)),
         ("+", "num_vec"): lambda a, b: Leaf("num_vec", [x + y for x, y in zip(a.w, b.w)]),
         ("-", "num_vec"): lambda a, b: Leaf("num_vec", [x - y for x, y in zip(a.w, b.w)]),
