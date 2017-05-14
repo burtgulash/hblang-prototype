@@ -7,6 +7,7 @@ from c import Lex, Parse, \
               ParseError, TT, Tree, Leaf, Unit
 
 from stack import Cactus, CT, Frame
+import matrix
 
 
 SELF_F = "F"
@@ -844,9 +845,23 @@ def Execute(code, env, cstack):
     return None, None, None
 
 
+def mod_merge(a, b):
+    m = {k: v for k, v in a.items()}
+    for k, v in b.items():
+        if k in m:
+            m[k] = {
+                **m[k],
+                **v,
+            }
+        else:
+            m[k] = v
+    return m
+
+
 def prepare_env():
+    modules_ = mod_merge(modules, matrix.modules)
     mods = {k: Leaf(TT.OBJECT, Env(None, from_dict=as_module(mod)))
-            for k, mod in modules.items()}
+            for k, mod in modules_.items()}
 
     rootenv = Env(None, from_dict={
         **as_module(BUILTINS),
