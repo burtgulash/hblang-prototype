@@ -663,6 +663,16 @@ class Some:
         return f"Some({self.value})"
 
 
+def mkrange(lo, d, hi):
+    n = (hi - 1 - lo) // d + 1
+    return (lo, d, n)
+
+
+def range_to_range(r):
+    lo, d, n = r
+    return range(lo, lo + d * n, d)
+
+
 BUILTINS = {
     "=": eq,
     "==": eq,
@@ -672,8 +682,8 @@ BUILTINS = {
     "retype": lambda a, b: Leaf(b.w, a.w),
     "sametype": lambda a, b: Leaf(TT.NUM, 1 if a.tt == b.tt else 0),
     "dispatch": set_dispatch,
-    "til": lambda a, b: Leaf("range", (a.w, 1, b.w)),
-    "enumerate": lambda a, b: Leaf("range", (0, 1, a.w)),
+    "til": lambda a, b: Leaf("range", mkrange(a.w, 1, b.w)),
+    # "enumerate": lambda a, b: Leaf("range", (0, 1, a.w)),
     "if": lambda a, b: unwrap(a.L),
     "not": lambda a, b: Leaf(TT.NUM, 1 - a.w), # TODO doesn't play with unit ()
     "then": lambda a, b: if_(b, a),
@@ -711,15 +721,16 @@ BUILTINS = {
 
 modules = {
     "range": {
-        ("+", TT.NUM): lambda a, b: Leaf("range", (a.w[0] + b.w, a.w[1], a.w[2] + b.w)),
-        ("-", TT.NUM): lambda a, b: Leaf("range", (a.w[0] - b.w, a.w[1], a.w[2] - b.w)),
-        ("*", TT.NUM): lambda a, b: Leaf("range", (a.w[0] * b.w, a.w[1] * b.w, a.w[2] * b.w)),
+        ("+", TT.NUM): lambda a, b: Leaf("range", (a.w[0] + b.w, a.w[1], a.w[2])),
+        ("-", TT.NUM): lambda a, b: Leaf("range", (a.w[0] - b.w, a.w[1], a.w[2])),
+        ("*", TT.NUM): lambda a, b: Leaf("range", (a.w[0] * b.w, a.w[1] * b.w, a.w[2])),
         # Division needs to convert to vec and then divide, otherwise lossy
-        "tovec": lambda a, b: Leaf("num_vec", list(range(a.w[0], a.w[2] + 1, a.w[1]))),
+        "tovec": lambda a, b: Leaf("num_vec", list(range_to_range(a.w))),
         # "fold": lambda a, b: Tree(Tree(a, Leaf(TT.SYMBOL, "tovec"), Unit), Leaf(TT.SYMBOL, "fold"), b),
         # "scan": lambda a, b: Tree(Tree(a, Leaf(TT.SYMBOL, "tovec"), Unit), Leaf(TT.SYMBOL, "scan"), b),
-        "sum": lambda a, b: Leaf(TT.NUM, arithmetic_series_sum(a.w[0], a.w[2], a.w[1])),
-        "len": lambda a, b: Leaf(TT.NUM, (a.w[2] - a.w[0]) // a.w[1] + 1),
+        #"sum": lambda a, b: Leaf(TT.NUM, arithmetic_series_sum(a.w[0], a.w[2], a.w[1])),
+        "sum": lambda a, b: Leaf(TT.NUM, a.w[1] * a.w[2] * (a.w[2] - 1) // 2 + (a.w[2] * a.w[0])),
+        "len": lambda a, b: Leaf(TT.NUM, a.w[2]),
         "each": lambda a, b: Tree(Tree(a, Leaf(TT.SYMBOL, "tovec"), Unit), Leaf(TT.SYMBOL, "each"), b),
     },
     "vec": {
