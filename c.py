@@ -49,6 +49,8 @@ class Leaf:
             return "{" + str(self.w) + "}"
         if self.tt == TT.THUNK:
             return f"[{self.w}]"
+        if self.tt == TT.UNIT:
+            return "()"
         # if self.tt in (TT.PUNCTUATION, TT.NUM, TT.CONS,
         #                TT.SYMBOL, TT.STRING, TT.SEPARATOR):
         #     return str(self.w)
