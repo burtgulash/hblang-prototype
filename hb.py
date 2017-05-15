@@ -107,14 +107,17 @@ def makefunc_(a, env):
 
     left_name, right_name = "x", "y"
     if body.tt == TT.TREE and body.H.tt == TT.SEPARATOR:
-        header = body.L
-        if header.tt == TT.TREE:
+        header, body = body.L, body.R
+        if header.tt == TT.SYMBOL:
+            left_name, right_name = header.w, "_"
+        elif header.tt == TT.TREE and header.H.tt == TT.CONS:
             left_name, right_name = header.L, header.R
             if not (left_name.tt == right_name.tt == TT.SYMBOL):
                 raise TypecheckError(f"Function parameter names need to by symbols."
                                      f" Given '{left_name.tt}' : '{right_name.tt}'")
             left_name, right_name = left_name.w, right_name.w
-            body = body.R
+        else:
+            raise TypecheckError(f"Fn header expected CONS TREE | SYMBOL. Got {header.tt}")
 
     body = bakevars(body, [left_name, right_name])
     return Leaf(TT.FUNCTION, Function(left_name, right_name, body, env))
