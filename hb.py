@@ -676,6 +676,14 @@ def range_to_range(r):
     return range(lo, lo + d * n, d)
 
 
+def bind(a, b):
+    if b.tt == TT.TREE:
+        fn, R = b.L, b.R
+    else:
+        fn, R = b, Unit
+    return Tree(a, fn, R)
+
+
 def list_bind(xs, fn, env, cstack):
     xs = [Eval(Tree(Leaf(TT.NUM, x), fn, Unit), env, cstack)[0].w for x in xs.w]
     for x in xs:
@@ -714,6 +722,7 @@ BUILTINS = {
     "!%": not_typecheck,
     "`": construct,
     "id": lambda a, b: a,
+    ">>": bind,
 
     "cpush":   [reset],
     "cpop":    [shift],
