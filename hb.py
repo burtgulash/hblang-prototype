@@ -684,15 +684,6 @@ def bind(a, b):
     return Tree(a, fn, R)
 
 
-def list_bind(xs, fn, env, cstack):
-    xs = [Eval(Tree(Leaf(TT.NUM, x), fn, Unit), env, cstack)[0].w for x in xs.w]
-    for x in xs:
-        if not isinstance(x, list):
-            raise TypecheckError("List bind expects list producing function")
-    xs = [y for ys in xs for y in ys]
-    return Leaf("num_vec", xs), env, cstack
-
-
 BUILTINS = {
     "=": eq,
     "==": eq,
@@ -786,7 +777,7 @@ modules = {
         "scan": scan,
         "order": order,
         ("@", "num_vec"): choose,
-        ">>": [list_bind],
+        ">>": lambda a, b: Tree(a, Leaf(TT.SYMBOL, "eachflat"), b),
     },
     TT.TREE: {
         # "if": if_,
