@@ -729,6 +729,7 @@ BUILTINS = {
     "load":    [load],
     "import":  [import_],
     "tap":     [tap],
+    "IP":      lambda a, b: Tree(Unit, Leaf(TT.SYMBOL, "import"), Leaf(TT.STRING, "lib/prelude.hb")), # make it easy to import prelude
 
     "showenv": [lambda a, b, env, cstack: (Leaf(TT.OBJECT, env), env, cstack)],
     "@":       [at],
@@ -755,7 +756,7 @@ modules = {
         "each": lambda a, b: Tree(Tree(a, Leaf(TT.SYMBOL, "tovec"), Unit), Leaf(TT.SYMBOL, "each"), b),
     },
     "vec": {
-        ",": lambda a, b: a.w.append(b) or a,
+        ",": lambda a, b: Leaf("vec", a.w + [b]),
         ("~", "vec"): lambda a, b: Leaf("vec", a.w + b.w),
         ("@", TT.NUM): lambda a, b: a.w[b.w],
         "len": lambda a, b: Leaf(TT.NUM, len(a.w)),
@@ -773,7 +774,7 @@ modules = {
         ("-", "num_vec"): lambda a, b: Leaf("num_vec", [x - y for x, y in zip(a.w, b.w)]),
         ("*", "num_vec"): lambda a, b: Leaf("num_vec", [x * y for x, y in zip(a.w, b.w)]),
         ("/", "num_vec"): lambda a, b: Leaf("num_vec", [x // y for x, y in zip(a.w, b.w)]),
-        (",", TT.NUM): lambda a, b: a.w.append(b.w) or a,
+        (",", TT.NUM): lambda a, b: Leaf("num_vec", a.w + [b.w]),
         ("=", TT.NUM): lambda a, b: Leaf("num_vec", [int(x == b.w) for x in a.w]),
         ("+", TT.NUM): lambda a, b: Leaf("num_vec", [x + b.w for x in a.w]),
         ("-", TT.NUM): lambda a, b: Leaf("num_vec", [x - b.w for x in a.w]),
