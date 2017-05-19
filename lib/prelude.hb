@@ -9,3 +9,4 @@
 | rep         is {y rrep x}
 | sort        is {xs | xs order. (@ flip.) xs}
 | eachflat    is {xs.f | xs each f fold ~}
+| abort       is {abort cpop x}

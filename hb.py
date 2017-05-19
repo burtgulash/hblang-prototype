@@ -866,7 +866,10 @@ def Execute(code, env, cstack):
         x = Lex(x)
         # print("LEX", y)
         x = Parse(x)
-        # print("PARSE", y)
+
+        # Wrap in global reset
+        x = Tree(Unit, Leaf(TT.SYMBOL, "cpush"), Leaf(TT.THUNK, x))
+
         x, env, cstack = Eval(x, env, cstack)
         return x, env, cstack
     except ParseError as err:
