@@ -4,27 +4,16 @@ from enum import Enum
 import re
 
 
-def right_associative(x):
-    return x and x in [":", "$", "%", "!%"]
+class WitnessedError(Exception):
 
-
-def parens_match(left, right):
-    return ((left == "(" and right == ")")
-         or (left == "[" and right == "]")
-         or (left == "{" and right == "}"))
-
-
-class ParseError(Exception):
-
-    def __init__(self, msg, leaf):
+    def __init__(self, msg, witness):
         super().__init__(msg)
         self.msg = msg
-        self.leaf = leaf
+        self.witness = witness
 
-    def __str__(self):
-        return f"""{self.msg}
-debug: {self.leaf.debug}
-"""
+
+class ParseError(WitnessedError):
+    pass
 
 
 class DebugInfo:
@@ -33,6 +22,11 @@ class DebugInfo:
         self.start = start
         self.end = end
         self.lineno = lineno
+
+    @staticmethod
+    def from_lr(L, R):
+        # Inherit line from start # NOTE merge start to end lines in error report
+        return DebugInfo(L.debug.start, R.debug.end, L.debug.lineno)
 
     def __str__(self):
         return (f"Debug(line={self.lineno}"
@@ -74,10 +68,11 @@ class Leaf:
 
 class Tree:
 
-    def __init__(self, L, H, R):
+    def __init__(self, L, H, R, debug=None):
         self.L = L
         self.H = H
         self.R = R
+        self.debug = debug
 
     @property
     def tt(self):
@@ -133,8 +128,18 @@ class TT(Enum):
         return hash(self.name)
 
 
-Unit = Leaf(TT.UNIT, "")
+Unit = Leaf(TT.UNIT, "", debug=DebugInfo(0, 0, 0))
 #EOF = Leaf(TT.END, "END")
+
+
+def right_associative(x):
+    return x and x in [":", "$", "%", "!%"]
+
+
+def parens_match(left, right):
+    return ((left == "(" and right == ")")
+         or (left == "[" and right == "]")
+         or (left == "{" and right == "}"))
 
 
 def comment(tok):
@@ -262,9 +267,9 @@ def end_matches(end, expected):
 
 def quote(x, paren_type):
     if paren_type == '[':
-        x = Leaf(TT.THUNK, x)
+        x = Leaf(TT.THUNK, x, debug=x.debug)
     elif paren_type == '{':
-        x = Tree(Leaf(TT.THUNK, x), Leaf(TT.SYMBOL, "func"), Unit)
+        x = Tree(Leaf(TT.THUNK, x), Leaf(TT.SYMBOL, "func"), Unit, debug=x.debug)
     return x
 
 
@@ -373,13 +378,13 @@ def LParse(stream, expected_end):
         if H.tt == TT.SEPARATOR:
             # Expression is separated by |
             R = LParse(stream, expected_end)
-            return Tree(L, H, R)
+            return Tree(L, H, R, debug=DebugInfo.from_lr(L, R))
 
         # Parse right token, which could be right leaning
         R = RParse(stream)
 
         # Create new node from L, H, R gathered above
-        L = Tree(L, H, R)
+        L = Tree(L, H, R, debug=DebugInfo.from_lr(L, R))
 
 
 if __name__ == "__main__":

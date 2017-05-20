@@ -3,8 +3,8 @@
 import sys
 import time
 
-from c import Lex, Parse, \
-              ParseError, TT, Tree, Leaf, Unit
+from c import Lex, Parse, TT, Tree, Leaf, Unit, \
+    WitnessedError, ParseError
 
 from stack import Cactus, CT, Frame
 import matrix
@@ -15,8 +15,9 @@ DISPATCH_SEP = ":"
 
 
 class UnexpectedType(Exception): pass
-class NoDispatch(Exception): pass
-class CantReduce(Exception): pass
+class CantReduce(WitnessedError): pass
+class NoDispatch(WitnessedError): pass
+
 
 
 class Env:
@@ -417,7 +418,7 @@ def Eval(x, env, cstack):
                 fn_env = path2env(path, env)
                 op = fn_env.lookup(fn, None)
                 if op is None:
-                    raise NoDispatch(f"Can't find module function {H} on L: {L.tt}")
+                    raise NoDispatch(f"Can't find module function {H} on L: {L.tt}", H)
                 assert op.tt in (TT.CONTINUATION, TT.SPECIAL,
                                  TT.FUNCTION, TT.BUILTIN, TT.THUNK)
                 H = op
@@ -439,8 +440,7 @@ def Eval(x, env, cstack):
                 continue
             elif H.tt in (TT.PUNCTUATION, TT.CONS, TT.SYMBOL,
                           TT.STRING, TT.SEPARATOR):
-                fn = H.w
-                H = dispatch(fn, L.tt, R.tt, env)
+                H = dispatch(H, L.tt, R.tt, env)
                 ins = CT.Right
                 continue
             #elif H.tt == TT.CLOSURE:
@@ -449,7 +449,7 @@ def Eval(x, env, cstack):
             #    ins = CT.Right
             #    continue
             else:
-                raise CantReduce(f"Can't reduce node: {H} of {H.tt}")
+                raise CantReduce(f"Can't reduce node: {H} of {H.tt}", H)
 #
 #         # Capture current environment and close over it
 #         if isinstance(x, Leaf) and x.tt == TT.FUNCTION:
@@ -475,7 +475,8 @@ def Eval(x, env, cstack):
             assert False
 
 
-def dispatch(fn, ltt, rtt, env):
+def dispatch(H, ltt, rtt, env):
+    fn = H.w
     # separator as fallback if no TCO? TODO remove it
     # Dispatch on left symbol (like a method)
     dispatch_env = env.lookup(ltt, None)
@@ -504,7 +505,7 @@ def dispatch(fn, ltt, rtt, env):
             op = env.lookup(fn, None)
         else: break
         if op is None:
-            raise NoDispatch(f"Can't dispatch {fn} on {ltt}:{rtt}")
+            raise NoDispatch(f"Can't dispatch {fn} on {ltt}:{rtt}", H)
 
     # print("LOOKUPED", fn, L.tt, op, type(op), op.tt, file=sys.stderr)
     if op.tt not in (TT.CONTINUATION, TT.SPECIAL,
@@ -875,11 +876,11 @@ def Execute(code, env, cstack):
 
         x, env, cstack = Eval(x, env, cstack)
         return x, env, cstack
-    except ParseError as err:
-        if err.leaf.debug is not None:
-            start = err.leaf.debug.start
-            end = err.leaf.debug.end
-            lineno = err.leaf.debug.lineno
+    except (ParseError, NoDispatch, CantReduce) as err:
+        if err.witness.debug is not None:
+            start = err.witness.debug.start
+            end = err.witness.debug.end
+            lineno = err.witness.debug.lineno
             line = code.split("\n")[lineno]
 
             break_ = "  "
@@ -891,7 +892,7 @@ def Execute(code, env, cstack):
 {" " * start}{"^" * (end - start)}{break_}{err.msg}"""
             print(msg, file=sys.stderr)
         #print(f"Parse error: {err}", file=sys.stderr)
-    except (NoDispatch, CantReduce, UnexpectedType) as err:
+    except UnexpectedType as err:
         print(err, file=sys.stderr)
 
     return Unit, None, None
