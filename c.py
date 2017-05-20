@@ -238,6 +238,7 @@ def Lex(text):
     toks = (tok for tok in toks
             if tok.tt not in (TT.SPACE, TT.COMMENT, TT.NEWLINE))
 
+    last = Leaf(TT.UNIT, None, debug=DebugInfo(0, 0, 0))
     for tok in toks:
         last = tok
         # print((last, last.debug), file=sys.stderr)

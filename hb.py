@@ -237,6 +237,9 @@ def new_object(a, b):
 
 
 def at(a, b, env, cstack):
+    if isinstance(a, Tree):
+        raise TypecheckError("at: Expected leaf, not tree")
+
     env_name = a.w
     if env_name == ".":
         e = env
@@ -880,7 +883,7 @@ def Execute(code, env, cstack):
             line = code.split("\n")[lineno]
 
             break_ = "  "
-            if start + (end - start) + len(break_) + len(err.msg) > 79:
+            if start + (end - start) + len(break_) + len(err.msg) > 70:
                 break_ = "\n"
 
             msg = f"""ERROR
