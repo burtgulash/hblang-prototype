@@ -873,11 +873,25 @@ def Execute(code, env, cstack):
         x, env, cstack = Eval(x, env, cstack)
         return x, env, cstack
     except ParseError as err:
-        print(f"Parse error: {err}", file=sys.stderr)
+        if err.leaf.debug is not None:
+            start = err.leaf.debug.start
+            end = err.leaf.debug.end
+            lineno = err.leaf.debug.lineno
+            line = code.split("\n")[lineno]
+
+            break_ = "  "
+            if start + (end - start) + len(break_) + len(err.msg) > 79:
+                break_ = "\n"
+
+            msg = f"""ERROR
+{line}
+{" " * start}{"^" * (end - start)}{break_}{err.msg}"""
+            print(msg, file=sys.stderr)
+        #print(f"Parse error: {err}", file=sys.stderr)
     except (NoDispatch, CantReduce, UnexpectedType) as err:
         print(err, file=sys.stderr)
 
-    return None, None, None
+    return Unit, None, None
 
 
 def mod_merge(a, b):

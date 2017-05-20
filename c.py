@@ -15,20 +15,32 @@ def parens_match(left, right):
 
 
 class ParseError(Exception):
-    pass
+
+    def __init__(self, msg, leaf):
+        super().__init__(msg)
+        self.msg = msg
+        self.leaf = leaf
+
+    def __str__(self):
+        return f"""{self.msg}
+debug: {self.leaf.debug}
+"""
 
 
 class DebugInfo:
 
-    def __init__(self, start, end):
+    def __init__(self, start, end, lineno):
         self.start = start
         self.end = end
-        self.lineno = None
+        self.lineno = lineno
 
-    def __repr__(self):
+    def __str__(self):
         return (f"Debug(line={self.lineno}"
                 f", start={self.start}"
                 f", end={self.end})")
+
+    def __repr__(self):
+        return str(self)
 
 
 class Leaf:
@@ -122,7 +134,7 @@ class TT(Enum):
 
 
 Unit = Leaf(TT.UNIT, "")
-EOF = Leaf(TT.END, "END")
+#EOF = Leaf(TT.END, "END")
 
 
 def comment(tok):
@@ -204,7 +216,7 @@ def lex_(text):
         tok = x.group(tt_name)
         tok = transform[tt_name](tok)
         span = x.span(x.lastindex)
-        yield Leaf(tt, tok, debug=DebugInfo(span[0], span[1]))
+        yield Leaf(tt, tok, debug=DebugInfo(span[0], span[1], None))
 
 
 def add_debug_info(toks):
@@ -226,8 +238,12 @@ def Lex(text):
     toks = (tok for tok in toks
             if tok.tt not in (TT.SPACE, TT.COMMENT, TT.NEWLINE))
 
-    yield from toks
-    yield EOF
+    for tok in toks:
+        last = tok
+        # print((last, last.debug), file=sys.stderr)
+        yield tok
+
+    yield Leaf(TT.END, "END", debug=DebugInfo(last.debug.end, last.debug.end + 1, last.debug.lineno))
 
 
 def end_of_expr(x):
@@ -237,9 +253,10 @@ def end_of_expr(x):
 def end_matches(end, expected):
     # print("END", end, expected)
     if end.tt == TT.RPAREN:
-        assert expected in ")]}"
+        # assert expected in ")]}"
         return end.w == expected
-    return expected is EOF
+    # return expected is EOF
+    return expected == TT.END
 
 
 def quote(x, paren_type):
@@ -292,7 +309,7 @@ class Buf:
 def Parse(toks):
     stream = Buf(toks)
     # import sys; print(stream.consume(), file=sys.stderr) # TODO debug print
-    return LParse(stream, EOF)
+    return LParse(stream, TT.END)
 
 
 # Parse parenthesized subexpressions
@@ -311,7 +328,7 @@ def RParse(stream):
     while True:
         R = ParenParse(stream)
         if isinstance(R, Leaf) and end_of_expr(R):
-            raise ParseError(f"Invalid expression. R can't be END token: '{R}'")
+            raise ParseError(f"Invalid expression. R can't be END token: '{R}'", R)
 
         rights.append(R)
         H = stream.next()
@@ -338,8 +355,8 @@ def LParse(stream, expected_end):
     L = ParenParse(stream)
     if end_of_expr(L):
         if not end_matches(L, expected_end):
-            raise ParseError(f"Parentheses don't match."
-                             f"Expected {expected_end}, got {L.w}")
+            raise ParseError(f"Parentheses don't match. "
+                             f"Expected {expected_end}, got {L.w}", L)
         return Unit
 
     while True:
@@ -348,8 +365,8 @@ def LParse(stream, expected_end):
         if end_of_expr(H):
             # End of expression
             if not end_matches(H, expected_end):
-                raise ParseError(f"Parentheses don't match."
-                                 f"Expected {expected_end}, got {H.w}")
+                raise ParseError(f"Parentheses don't match. "
+                                 f"Expected {expected_end}, got {H.w}", H)
             return L
 
         if H.tt == TT.SEPARATOR:
