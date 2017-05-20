@@ -51,6 +51,9 @@ modules = {
     "matrix": {
         ("reshape", "num_vec"): lambda a, b: Leaf(a.tt, a.w.reshape(b.w)),
         ("+", TT.NUM): lambda a, b: Leaf(a.tt, a.w.apply((lambda a, b: a + b), b.w)),
+        ("-", TT.NUM): lambda a, b: Leaf(a.tt, a.w.apply((lambda a, b: a - b), b.w)),
+        ("*", TT.NUM): lambda a, b: Leaf(a.tt, a.w.apply((lambda a, b: a * b), b.w)),
+        ("/", TT.NUM): lambda a, b: Leaf(a.tt, a.w.apply((lambda a, b: a // b), b.w)),
         "shape": lambda a, b: Leaf("num_vec", a.w.shape()),
         "rank": lambda a, b: Leaf(TT.NUM, a.w.rank()),
     }

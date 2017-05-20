@@ -26,7 +26,10 @@ class DebugInfo:
     @staticmethod
     def from_lr(L, R):
         # Inherit line from start # NOTE merge start to end lines in error report
-        return DebugInfo(L.debug.start, R.debug.end, L.debug.lineno)
+        start = L.debug.start if L.debug is not None else None
+        end = R.debug.end if R.debug is not None else None
+        lineno = L.debug.start if L.debug is not None else None
+        return DebugInfo(start, end, lineno)
 
     def __str__(self):
         return (f"Debug(line={self.lineno}"
