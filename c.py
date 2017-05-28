@@ -120,6 +120,7 @@ class TT(Enum):
     TREE = 18
     OBJECT = 19
     CONS = 20
+    NATIVE_OBJECT = 20
 
     def __str__(self):
         return self.name

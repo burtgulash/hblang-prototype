@@ -25,7 +25,8 @@ class Env:
     def __init__(self, parent, from_dict=None):
         # self.parent = parent
         self.e = {**(from_dict or {})}
-        self.e[":"] = parent
+        self.parent = parent
+        # self.e[":"] = parent
 
     def lookup(self, name, or_else):
         env = self.find_env(name)
@@ -38,7 +39,8 @@ class Env:
         if name in self.e:
             return self
         else:
-            parent = self.e.get(":")
+            # parent = self.e.get(":")
+            parent = self.parent
             if parent:
                 return parent.find_env(name)
         return None
@@ -245,7 +247,8 @@ def at(a, b, env, cstack):
     if env_name == ".":
         e = env
     elif env_name == ":":
-        e = env.lookup(":", None) # TODO check if some focka didn't delete it
+        # e = env.lookup(":", None) # TODO check if some focka didn't delete it
+        e = env.parent
     else:
         e = env.lookup(env_name, None)
         if e is None or e.tt != TT.OBJECT:
@@ -477,6 +480,8 @@ def Eval(x, env, cstack):
 
 def dispatch(H, ltt, rtt, env):
     fn = H.w
+    # print(f"Dispatching {fn} on {ltt} : {rtt}", file=sys.stderr)
+
     # separator as fallback if no TCO? TODO remove it
     # Dispatch on left symbol (like a method)
     dispatch_env = env.lookup(ltt, None)
@@ -688,7 +693,59 @@ def bind(a, b):
     return Tree(a, fn, R)
 
 
+def json_each(filename, fn):
+    import json
+    with open(filename, "r") as f:
+        for item in f:
+            item = json.loads(item)
+            item = Leaf(TT.NATIVE_OBJECT, Env(None, from_dict=item))
+            item = Tree(item, fn, Unit)
+
+            env = prepare_env()
+            cstack = Cactus()
+            item, _, _ = Eval(item, env, cstack)
+            print(item)
+
+    return Unit
+
+
+def add_type(x):
+    if isinstance(x, (Leaf, Tree)):
+        return x
+    elif isinstance(x, str):
+        t = TT.STRING
+    elif isinstance(x, int):
+        t = TT.NUM
+    else:
+        raise TypecheckError(f"Can't add type to native type {type(x).__name__} ")
+    return Leaf(t, x)
+
+
+def mod_assign(a, b):
+    a.w.bind(b.L.w, b.R)
+    return a
+
+
+def ptr_update(a, b, env, cstack):
+    mod_, at_ = a.w
+    mod, at = mod_.w, at_.w
+    value = add_type(mod.lookup(at, Unit))
+    update_fn = b
+    value, _, _ = Eval(Tree(value, update_fn, Unit), env, cstack)
+    mod.bind(at, value)
+    return a, env, cstack
+
+
+def mod_update(a, b, env, cstack):
+    value = add_type(a.w.lookup(b.L.w, Unit))
+    update_fn = b.R
+    value, _, _ = Eval(Tree(value, update_fn, Unit), env, cstack)
+    a.w.bind(b.L.w, value)
+    return a, env, cstack
+
+
 BUILTINS = {
+    "jsoneach": lambda a, b: json_each(a.w, b),
     "=": eq,
     "==": eq,
     "!=": lambda a, b: Leaf(TT.NUM, 1 - eq(a, b).w),
@@ -799,8 +856,26 @@ modules = {
     },
     TT.OBJECT: {
         "extend": lambda a, b: Leaf(TT.OBJECT, a.w),
-        # ("@", TT.TREE): lambda a, b, env: env.bind(b.L.w, b.R), # TODO implement assignment
+        ("@", TT.TREE): mod_assign,
+        ("<=", TT.TREE): [mod_update],
+        ("&", TT.SYMBOL): lambda a, b: Leaf("pointer", (a, b)),
+        ("&", TT.STRING): lambda a, b: Leaf("pointer", (a, b)),
         ("@", TT.SYMBOL): lambda a, b: a.w.lookup(b.w, Unit),
+        ("@", TT.STRING): lambda a, b: a.w.lookup(b.w, Unit),
+    },
+    TT.NATIVE_OBJECT: {
+        ("@", TT.TREE): mod_assign,
+        ("<=", TT.TREE): [mod_update],
+        ("&", TT.SYMBOL): lambda a, b: Leaf("pointer", (a, b)),
+        ("&", TT.STRING): lambda a, b: Leaf("pointer", (a, b)),
+        ("@", TT.SYMBOL): lambda a, b: add_type(a.w.lookup(b.w, Unit)),
+        ("@", TT.STRING): lambda a, b: add_type(a.w.lookup(b.w, Unit)),
+    },
+    "pointer": {
+        ("set", TT.FUNCTION): [ptr_update],
+        "mod": lambda a, b: a.w[0],
+        "at": lambda a, b: a.w[1],
+        "get": lambda a, b: add_type(a.w[0].w.lookup(a.w[1].w, Unit)),
     },
     TT.NUM: {
         "tovec": lambda a, b: Leaf("num_vec", [a.w]),
@@ -891,6 +966,8 @@ def Execute(code, env, cstack):
 {line}
 {" " * start}{"^" * (end - start)}{break_}{err.msg}"""
             print(msg, file=sys.stderr)
+        else:
+            print(err, file=sys.stderr)
         #print(f"Parse error: {err}", file=sys.stderr)
     except UnexpectedType as err:
         print(err, file=sys.stderr)
