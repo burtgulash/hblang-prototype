@@ -726,6 +726,14 @@ def mod_assign(a, b):
     return a
 
 
+def mod_update(a, b, env, cstack):
+    value = add_type(a.w.lookup(b.L.w, Unit))
+    update_fn = b.R
+    value, _, _ = Eval(Tree(value, update_fn, Unit), env, cstack)
+    a.w.bind(b.L.w, value)
+    return a, env, cstack
+
+
 def ptr_update(a, b, env, cstack):
     mod_, at_ = a.w
     mod, at = mod_.w, at_.w
@@ -736,12 +744,18 @@ def ptr_update(a, b, env, cstack):
     return a, env, cstack
 
 
-def mod_update(a, b, env, cstack):
-    value = add_type(a.w.lookup(b.L.w, Unit))
-    update_fn = b.R
-    value, _, _ = Eval(Tree(value, update_fn, Unit), env, cstack)
-    a.w.bind(b.L.w, value)
-    return a, env, cstack
+def ptr_set(a, b):
+    mod_, at_ = a.w
+    mod, at = mod_.w, at_.w
+    mod.bind(at, b)
+    return a
+
+
+def mod_merge(a, b):
+    return Leaf(a.tt, Env(a.w.parent, from_dict={
+        **a.w.e,
+        **b.w.e,
+    }))
 
 
 BUILTINS = {
@@ -862,6 +876,7 @@ modules = {
         ("&", TT.STRING): lambda a, b: Leaf("pointer", (a, b)),
         ("@", TT.SYMBOL): lambda a, b: a.w.lookup(b.w, Unit),
         ("@", TT.STRING): lambda a, b: a.w.lookup(b.w, Unit),
+        ("~", TT.OBJECT): mod_merge,
     },
     TT.NATIVE_OBJECT: {
         ("@", TT.TREE): mod_assign,
@@ -870,9 +885,11 @@ modules = {
         ("&", TT.STRING): lambda a, b: Leaf("pointer", (a, b)),
         ("@", TT.SYMBOL): lambda a, b: add_type(a.w.lookup(b.w, Unit)),
         ("@", TT.STRING): lambda a, b: add_type(a.w.lookup(b.w, Unit)),
+        ("~", TT.NATIVE_OBJECT): mod_merge,
     },
     "pointer": {
-        ("set", TT.FUNCTION): [ptr_update],
+        ("update", TT.FUNCTION): [ptr_update],
+        "set": ptr_set,
         "mod": lambda a, b: a.w[0],
         "at": lambda a, b: a.w[1],
         "get": lambda a, b: add_type(a.w[0].w.lookup(a.w[1].w, Unit)),
