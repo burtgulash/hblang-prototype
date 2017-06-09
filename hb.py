@@ -157,13 +157,15 @@ def reset(a, b, env, cstack):
 
 def shift(a, b, env, cstack):
     cc = cstack.spop()
-    # Don't let the continuation binding propagate to parent environment
-    env = Env(env)
+    # # Don't let the continuation binding propagate to parent environment
+    # env = Env(env)
     # So far continuation is just a pair of st and env
     continuation = Leaf(TT.CONTINUATION, (cc, env))
-    env.bind("cc", continuation)
-    if isinstance(b, Leaf) and b.tt == TT.THUNK:
-        b = b.w
+    #env.bind("cc", continuation)
+
+    # New: let the cc binding take place in function object
+    if isinstance(b, Leaf) and b.tt in (TT.THUNK, TT.FUNCTION):
+        b = Tree(continuation, b, Unit)
     return b, env, cstack
 
 
@@ -550,18 +552,34 @@ def fold(a, b, env, cstack):
     return acc, env, cstack
 
 
+# def num_fold(a, b):
+#     if isinstance(b, Tree):
+#         zero = b.R.w
+#         op = b.L.w
+#     else:
+#         op = b.w
+#         zero = {
+#             "+": 0,
+#             "-": 0,
+#             "*": 1,
+#             "/": 1,
+#         }[op]
+# 
+#     op = {
+#         "+": lambda a, b: a + b,
+#         "-": lambda a, b: a - b,
+#         "*": lambda a, b: a * b,
+#         "/": lambda a, b: a // b,
+#     }[op]
+# 
+#     acc = zero
+#     for x in a.w:
+#         acc = op(acc, x)
+#     return Leaf(TT.NUM, acc)
+
+
 def num_fold(a, b):
-    if isinstance(b, Tree):
-        zero = b.R.w
-        op = b.L.w
-    else:
-        op = b.w
-        zero = {
-            "+": 0,
-            "-": 0,
-            "*": 1,
-            "/": 1,
-        }[op]
+    op = b.w
 
     op = {
         "+": lambda a, b: a + b,
@@ -570,10 +588,37 @@ def num_fold(a, b):
         "/": lambda a, b: a // b,
     }[op]
 
-    acc = zero
-    for x in a.w:
+    acc = a.w[0]
+    for x in a.w[1:]:
         acc = op(acc, x)
     return Leaf(TT.NUM, acc)
+
+
+def num_fold_by(a, b):
+    if b.tt != TT.TREE:
+        raise TypecheckError(f"num fold by Expected tree. Got {b.tt}")
+
+    arr = a.w
+    key = b.L.w
+    op = b.R.w
+
+    op = {
+        "+": lambda a, b: a + b,
+        "-": lambda a, b: a - b,
+        "*": lambda a, b: a * b,
+        "/": lambda a, b: a // b,
+    }[op]
+
+    acc = [None] * (max(key) + 1)
+    for i, y in enumerate(zip(arr, key)):
+        x, slot = y
+        slot_value = acc[slot]
+        if slot_value is None:
+            acc[slot] = x
+        else:
+            acc[slot] = op(slot_value, x)
+
+    return Leaf("num_vec", acc)
 
 
 def scan(a, b):
@@ -791,7 +836,9 @@ BUILTINS = {
     ">>": bind,
 
     "cpush":   [reset],
+    "reset":   [reset],
     "cpop":    [shift],
+    "shift":    [shift],
     "load":    [load],
     "import":  [import_],
     "tap":     [tap],
@@ -832,6 +879,7 @@ modules = {
         "fold": [fold],
         ("zip", "vec"): zip_,
         ("@", "num_vec"): choose,
+        "tonums": lambda a, b: Leaf("num_vec", [x.w for x in a.w]),
     },
     "num_vec": {
         ("~", "num_vec"): lambda a, b: Leaf("num_vec", a.w + b.w),
@@ -850,7 +898,10 @@ modules = {
         ("/", TT.NUM): lambda a, b: Leaf("num_vec", [x // b.w for x in a.w]),
         ("@", TT.NUM): lambda a, b: Leaf(TT.NUM, a.w[b.w]),
         "toset": lambda a, b: Leaf("num_set", set(a.w)),
+        "max": lambda a, b: Leaf(TT.NUM, max(a.w)),
+        "min": lambda a, b: Leaf(TT.NUM, min(a.w)),
         "sum": lambda a, b: Leaf(TT.NUM, sum(a.w)),
+        "foldby": num_fold_by,
         "fold": num_fold,
         "scan": scan,
         "order": order,

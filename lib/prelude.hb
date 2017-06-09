@@ -10,3 +10,9 @@
 | sort        is {xs | xs order. (@ flip.) xs}
 | eachflat    is {xs.f | xs each f fold ~}
 | abort       is {abort cpop x}
+| reduce      is {xs.f
+                  | xs len. as l
+                  | .$l = 0 then () : [
+                    xs @0 {acc.i | i >= (.$l) then [acc] : [(acc f (xs @i)) F (i + 1)]} 1
+                  ]}
+

@@ -8,7 +8,7 @@ if exists("b:current_syntax")
 endif
 
 
-syn keyword hbContinuation cpush cpop
+syn keyword hbContinuation cpush cpop shift reset
 syn keyword hbFunctionKeyword contained x y F
 
 syn match hbNumber "[_0-9]*"
