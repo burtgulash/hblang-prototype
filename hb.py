@@ -94,12 +94,16 @@ def bakevars(x, vars):
         x = Leaf(x.tt, x.w.clone(body))
     elif x.tt == TT.SYMBOL and x.w in vars:
         # NOTE: only bake on symbol, not on string. Otherwise you couldn't do assignments
-        x = Tree(Unit, Leaf(TT.PUNCTUATION, "$"), x)
+        x = Tree(Leaf(TT.SYMBOL, "."), Leaf(TT.PUNCTUATION, "$"), x)
     return x
 
 
 def makefunc(a, b, env, cstack):
     return makefunc_(a, env), None, env, cstack
+
+
+def iscons(x):
+    return x.tt == TT.PUNCTUATION and x.w in (".", ":")
 
 
 def makefunc_(a, env):
@@ -113,14 +117,15 @@ def makefunc_(a, env):
         header, body = body.L, body.R
         if header.tt == TT.SYMBOL:
             left_name, right_name = header.w, "_"
-        elif header.tt == TT.TREE and header.H.tt == TT.CONS:
+        elif header.tt == TT.TREE and iscons(header.H):
             left_name, right_name = header.L, header.R
             if not (left_name.tt == right_name.tt == TT.SYMBOL):
                 raise TypecheckError(f"Function parameter names need to by symbols."
                                      f" Given '{left_name.tt}' : '{right_name.tt}'")
             left_name, right_name = left_name.w, right_name.w
         else:
-            raise TypecheckError(f"Fn header expected CONS TREE | SYMBOL. Got {header.tt}")
+            header, body = None, a.w
+            #raise TypecheckError(f"Fn header expected cons TREE | SYMBOL. Got {header.tt}")
 
     body = bakevars(body, [left_name, right_name])
     return Leaf(TT.FUNCTION, Function(left_name, right_name, body, env))
@@ -381,10 +386,19 @@ def Eval(x, env, cstack):
                 # cstack.push(Frame(CT.Delim, L, H, R, env))
                 cstack.scopy(cc)
                 x, ins = L, next_ins(L)
-            elif H.tt == TT.CONS and H.w in ".:":
+            elif iscons(H):
                 x = Tree(L, H, R)
             elif H.tt == TT.BUILTIN:
-                x = H.w(L, R)
+                try:
+                    x = H.w(L, R)
+                except Exception as exc:
+                    # NOTE temporary solution. Wrap exception's string into
+                    # error and shift it in. Better solution would be to return
+                    # (x, err) pair from builtins instead of catching arbitrary
+                    # error. In this case, at least create error inheritance
+                    # hierarchy
+                    x = Tree(Unit, Leaf(TT.SYMBOL, "shift"), Leaf(TT.ERROR, str(exc), debug=H.debug))
+
                 ins = next_ins(x)
                 continue
             elif H.tt == TT.SPECIAL:
@@ -394,7 +408,7 @@ def Eval(x, env, cstack):
                 # and continue with this error continuation to next eval
                 # iteration
                 if error is not None:
-                    x = Tree(Unit, Leaf(TT.SYMBOL, "shift"), Leaf(TT.ERROR, error))
+                    x = Tree(Unit, Leaf(TT.SYMBOL, "shift"), Leaf(TT.ERROR, error, debug=H.debug))
 
                 ins = next_ins(x)
                 continue
@@ -425,7 +439,7 @@ def Eval(x, env, cstack):
                 x = func.body
                 ins = next_ins(x)
                 continue
-            elif H.tt == TT.TREE and H.H.tt == TT.CONS:
+            elif H.tt == TT.TREE and iscans(H.H):
                 path, fn = tree2env(H, env)
                 fn_env = path2env(path, env)
                 op = fn_env.lookup(fn, None)
@@ -450,7 +464,7 @@ def Eval(x, env, cstack):
                                 TT.BUILTIN, TT.THUNK, TT.SYMBOL)
                 ins = CT.Right
                 continue
-            elif H.tt in (TT.PUNCTUATION, TT.CONS, TT.SYMBOL,
+            elif H.tt in (TT.PUNCTUATION, TT.SYMBOL,
                           TT.STRING, TT.SEPARATOR):
                 H = dispatch(H, L.tt, R.tt, env)
                 ins = CT.Right
@@ -697,7 +711,7 @@ def asmod_tree(a, b, env, cstack):
 
 
 def zip_(a, b):
-    return Leaf(a.tt, [Tree(x, Leaf(TT.CONS, ":"), y) for x, y in zip(a.w, b.w)])
+    return Leaf(a.tt, [Tree(x, Leaf(TT.PUNCTUATION, ":"), y) for x, y in zip(a.w, b.w)])
 
 
 def order(a, b):
@@ -844,6 +858,7 @@ BUILTINS = {
     "object": new_object(Unit, Unit),
     "bakevar": bakevar,
     "%": typecheck,
+    ":%": typecheck,
     "!%": not_typecheck,
     "`": construct,
     "id": lambda a, b: a,
@@ -862,6 +877,7 @@ BUILTINS = {
     "@":       [at],
     #"$":       [lambda a, b, env, cstack: (env.lookup(b.w, a), None, env, cstack)],
     "$":       [safe_variable],
+    ":$":      [safe_variable],
     "as":      [lambda a, b, env, cstack: (env.bind(b.w, a), None, env, cstack)],
     "assign":  [lambda a, b, env, cstack: (env.assign(b.w, a), None, env, cstack)],
     "is":      [lambda a, b, env, cstack: (env.assign(a.w, b), None, env, cstack)],
