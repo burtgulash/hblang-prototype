@@ -863,6 +863,7 @@ BUILTINS = {
     "`": construct,
     "id": lambda a, b: a,
     ">>": bind,
+    "error": lambda a, b: Leaf(TT.ERROR, a),
 
     "cpush":   [reset],
     "reset":   [reset],
