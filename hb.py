@@ -99,7 +99,7 @@ def bakevars(x, vars):
 
 
 def makefunc(a, b, env, cstack):
-    return makefunc_(a, env), env, cstack
+    return makefunc_(a, env), None, env, cstack
 
 
 def makefunc_(a, env):
@@ -131,10 +131,10 @@ def load(a, b, env, cstack):
         code = f.read()
     # print(f"CODE: '{code}'", file=sys.stderr)
 
-    _, module, _ = Execute(code, Env(env), cstack)
+    _, _, module, _ = Execute(code, Env(env), cstack)
     if module is None:
         raise TypecheckError("Module can't be NULL")
-    return Leaf(TT.OBJECT, module), env, cstack
+    return Leaf(TT.OBJECT, module), None, env, cstack
 
 
 def import_(a, b, env, cstack):
@@ -142,17 +142,17 @@ def import_(a, b, env, cstack):
         code = f.read()
     # print(f"CODE: '{code}'", file=sys.stderr)
 
-    _, module, _ = Execute(code, env, cstack)
+    _, _, module, _ = Execute(code, env, cstack)
     if module is None:
         raise TypecheckError("Module can't be NULL")
-    return Unit, env, cstack
+    return Unit, None, env, cstack
 
 
 def reset(a, b, env, cstack):
     cstack.spush()
     if isinstance(b, Leaf) and b.tt == TT.THUNK:
         b = b.w
-    return b, env, cstack
+    return b, None, env, cstack
 
 
 def shift(a, b, env, cstack):
@@ -166,7 +166,7 @@ def shift(a, b, env, cstack):
     # New: let the cc binding take place in function object
     if isinstance(b, Leaf) and b.tt in (TT.THUNK, TT.FUNCTION):
         b = Tree(continuation, b, Unit)
-    return b, env, cstack
+    return b, None, env, cstack
 
 
 def setenv(H, env):
@@ -267,7 +267,7 @@ def at(a, b, env, cstack):
         item = e.lookup(slot_name, None)
         assert isinstance(item, Leaf) or isinstance(item, Tree)
 
-    return item, env, cstack
+    return item, None, env, cstack
 
 
 class TypecheckError(Exception):
@@ -388,7 +388,14 @@ def Eval(x, env, cstack):
                 ins = next_ins(x)
                 continue
             elif H.tt == TT.SPECIAL:
-                x, env, cstack = H.w(L, R, env, cstack)
+                x, error, env, cstack = H.w(L, R, env, cstack)
+
+                # Capture error value from error channel, wrap it with TT.ERROR
+                # and continue with this error continuation to next eval
+                # iteration
+                if error is not None:
+                    x = Tree(Unit, Leaf(TT.SYMBOL, "shift"), Leaf(TT.ERROR, error))
+
                 ins = next_ins(x)
                 continue
             elif H.tt == TT.THUNK:
@@ -464,7 +471,7 @@ def Eval(x, env, cstack):
         c = cstack.pop()
         ins = c.ct
         if ins == CT.Return:
-            return x, env, cstack
+            return x, None, env, cstack # TODO None as error?
 
         L, H, R, env = c.L, c.H, c.R, c.env
         # print("Restore", L, H, R, c.ct.name, id(env), env)
@@ -548,8 +555,8 @@ def fold(a, b, env, cstack):
         xs = a.w[1:]
 
     for x in xs:
-        acc, _, _ = Eval(Tree(acc, f, x), env, cstack)
-    return acc, env, cstack
+        acc, _, _, _ = Eval(Tree(acc, f, x), env, cstack)
+    return acc, None, env, cstack
 
 
 # def num_fold(a, b):
@@ -564,14 +571,14 @@ def fold(a, b, env, cstack):
 #             "*": 1,
 #             "/": 1,
 #         }[op]
-# 
+#
 #     op = {
 #         "+": lambda a, b: a + b,
 #         "-": lambda a, b: a - b,
 #         "*": lambda a, b: a * b,
 #         "/": lambda a, b: a // b,
 #     }[op]
-# 
+#
 #     acc = zero
 #     for x in a.w:
 #         acc = op(acc, x)
@@ -661,13 +668,13 @@ def each_prep(b):
 def each(a, b, env, cstack):
     f, R = each_prep(b)
     v = [Eval(Tree(x, f, R), env, cstack)[0] for x in a.w]
-    return Leaf("vec", v), env, cstack
+    return Leaf("vec", v), None, env, cstack
 
 
 def num_each(a, b, env, cstack):
     f, R = each_prep(b)
     v = [Eval(Tree(Leaf(TT.NUM, x), f, R), env, cstack)[0] for x in a.w]
-    return Leaf("vec", v), env, cstack
+    return Leaf("vec", v), None, env, cstack
 
 
 def arithmetic_series_sum(a, b, by):
@@ -681,12 +688,12 @@ def asmod_vec(a, b, env, cstack):
         assert item.tt == TT.TREE
         assert item.L.tt in (TT.SYMBOL, TT.STRING)
         d[item.L.w] = item.R
-    return Leaf(TT.OBJECT, Env(env, from_dict=d)), env, cstack
+    return Leaf(TT.OBJECT, Env(env, from_dict=d)), None, env, cstack
 
 def asmod_tree(a, b, env, cstack):
     assert a.L.tt in (TT.SYMBOL, TT.STRING)
     d = {a.L.w: a.R}
-    return Leaf(TT.OBJECT, Env(env, from_dict=d)), env, cstack
+    return Leaf(TT.OBJECT, Env(env, from_dict=d)), None, env, cstack
 
 
 def zip_(a, b):
@@ -708,7 +715,7 @@ def choose(a, b):
 def tap(a, b, env, cstack):
     # Just for side effect
     Eval(Tree(a, b, Unit), env, cstack)
-    return a, env, cstack
+    return a, None, env, cstack
 
 
 class Some:
@@ -748,7 +755,7 @@ def json_each(filename, fn):
 
             env = prepare_env()
             cstack = Cactus()
-            item, _, _ = Eval(item, env, cstack)
+            item, _, _, _ = Eval(item, env, cstack)
             print(item)
 
     return Unit
@@ -774,9 +781,9 @@ def mod_assign(a, b):
 def mod_update(a, b, env, cstack):
     value = add_type(a.w.lookup(b.L.w, Unit))
     update_fn = b.R
-    value, _, _ = Eval(Tree(value, update_fn, Unit), env, cstack)
+    value, _, _, _ = Eval(Tree(value, update_fn, Unit), env, cstack)
     a.w.bind(b.L.w, value)
-    return a, env, cstack
+    return a, None, env, cstack
 
 
 def ptr_update(a, b, env, cstack):
@@ -784,9 +791,9 @@ def ptr_update(a, b, env, cstack):
     mod, at = mod_.w, at_.w
     value = add_type(mod.lookup(at, Unit))
     update_fn = b
-    value, _, _ = Eval(Tree(value, update_fn, Unit), env, cstack)
+    value, _, _, _ = Eval(Tree(value, update_fn, Unit), env, cstack)
     mod.bind(at, value)
-    return a, env, cstack
+    return a, None, env, cstack
 
 
 def ptr_set(a, b):
@@ -801,6 +808,13 @@ def mod_merge(a, b):
         **a.w.e,
         **b.w.e,
     }))
+
+
+def safe_variable(a, b, env, cstack):
+    value, err = env.lookup(b.w, None), None
+    if value is None:
+        err = f"Variable {b.w} not defined"
+    return value, err, env, cstack
 
 
 BUILTINS = {
@@ -844,12 +858,13 @@ BUILTINS = {
     "tap":     [tap],
     "IP":      lambda a, b: Tree(Unit, Leaf(TT.SYMBOL, "import"), Leaf(TT.STRING, "lib/prelude.hb")), # make it easy to import prelude
 
-    "showenv": [lambda a, b, env, cstack: (Leaf(TT.OBJECT, env), env, cstack)],
+    "showenv": [lambda a, b, env, cstack: (Leaf(TT.OBJECT, env), None, env, cstack)],
     "@":       [at],
-    "$":       [lambda a, b, env, cstack: (env.lookup(b.w, a), env, cstack)],
-    "as":      [lambda a, b, env, cstack: (env.bind(b.w, a), env, cstack)],
-    "assign":  [lambda a, b, env, cstack: (env.assign(b.w, a), env, cstack)],
-    "is":      [lambda a, b, env, cstack: (env.assign(a.w, b), env, cstack)],
+    #"$":       [lambda a, b, env, cstack: (env.lookup(b.w, a), None, env, cstack)],
+    "$":       [safe_variable],
+    "as":      [lambda a, b, env, cstack: (env.bind(b.w, a), None, env, cstack)],
+    "assign":  [lambda a, b, env, cstack: (env.assign(b.w, a), None, env, cstack)],
+    "is":      [lambda a, b, env, cstack: (env.assign(a.w, b), None, env, cstack)],
     "func":    [makefunc],
 }
 
@@ -1017,8 +1032,8 @@ def Execute(code, env, cstack):
         # Wrap in global reset
         x = Tree(Unit, Leaf(TT.SYMBOL, "cpush"), Leaf(TT.THUNK, x))
 
-        x, env, cstack = Eval(x, env, cstack)
-        return x, env, cstack
+        x, err, env, cstack = Eval(x, env, cstack)
+        return x, err, env, cstack
     except (ParseError, NoDispatch, CantReduce) as err:
         if err.witness.debug is not None:
             start = err.witness.debug.start
@@ -1040,7 +1055,7 @@ def Execute(code, env, cstack):
     except UnexpectedType as err:
         print(err, file=sys.stderr)
 
-    return Unit, None, None
+    return Unit, None, None, None
 
 
 def mod_merge(a, b):
@@ -1078,7 +1093,7 @@ def Repl(env, rstack, prompt="> "):
     while True:
         try:
             x = input(prompt)
-            x, _, _ = Execute(x, env, cstack)
+            x, _, _, _ = Execute(x, env, cstack)
             print(x)
         except TypecheckError as err:
             print(err, file=sys.stderr)
@@ -1105,7 +1120,7 @@ if __name__ == "__main__":
             else:
                 src = sys.stdin.read()
 
-            x, env, cstack = Execute(src, env, cstack)
+            x, _, env, cstack = Execute(src, env, cstack)
             print(x)
         else:
             print("Missing command (run)", file=sys.stderr)
