@@ -19,6 +19,16 @@ class CantReduce(WitnessedError): pass
 class NoDispatch(WitnessedError): pass
 
 
+class Panic:
+    """ Instance of some continuation travelling the stack.  Eg. raised error.
+    Used when a native function wants to throw an error or raise some other
+    kind of continuation.
+    """
+
+    def __init__(self, tag, value):
+        self.tag = tag
+        self.value = value
+
 
 class Env:
 
@@ -345,6 +355,11 @@ def next_ins(x):
     raise AssertionError(f"Result needs to be either Leaf or Tree. Got '{type(x)}'")
 
 
+def hb_shift(tag, value):
+    tag = Leaf(TT.SYMBOL, tag)
+    return Tree(tag, Leaf(TT.SYMBOL, "shift"), value)
+
+
 def Eval(x, env, cstack):
     # Stack of continuations
     cstack.push(Frame(CT.Return, None, None, None, env))
@@ -397,19 +412,20 @@ def Eval(x, env, cstack):
                     # (x, err) pair from builtins instead of catching arbitrary
                     # error. In this case, at least create error inheritance
                     # hierarchy
-                    x = Tree(Unit, Leaf(TT.SYMBOL, "shift"), Leaf(TT.ERROR, str(exc), debug=H.debug))
+                    x = hb_shift("error", Leaf(TT.ERROR, str(exc), debug=H.debug))
 
                 ins = next_ins(x)
                 x.debug = DebugInfo(L.debug.start, R.debug.end, L.debug.lineno)
                 continue
             elif H.tt == TT.SPECIAL:
-                x, error, env, cstack = H.w(L, R, env, cstack)
+                x, panic, env, cstack = H.w(L, R, env, cstack)
 
-                # Capture error value from error channel, wrap it with TT.ERROR
-                # and continue with this error continuation to next eval
-                # iteration
-                if error is not None:
-                    x = Tree(Unit, Leaf(TT.SYMBOL, "shift"), Leaf(TT.ERROR, error, debug=H.debug))
+                # Capture panic tag and value from panic channel, wrap it with
+                # TT.ERROR and continue with this error continuation to next
+                # eval iteration
+                if panic is not None:
+                    assert isinstance(panic, Panic)
+                    x = hb_shift(panic.tag, panic.value)
 
                 ins = next_ins(x)
                 continue
@@ -831,7 +847,7 @@ def mod_merge(a, b):
 def safe_variable(a, b, env, cstack):
     value, err = env.lookup(b.w, None), None
     if value is None:
-        err = f"Variable {b.w} not defined"
+        err = Panic("error", Leaf(TT.STRING, f"Variable {b.w} not defined"))
     return value, err, env, cstack
 
 
