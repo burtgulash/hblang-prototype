@@ -4,7 +4,7 @@ import sys
 import time
 
 from c import Lex, Parse, TT, Tree, Leaf, Unit, \
-    WitnessedError, ParseError
+    WitnessedError, ParseError, DebugInfo
 
 from stack import Cactus, CT, Frame
 import matrix
@@ -400,6 +400,7 @@ def Eval(x, env, cstack):
                     x = Tree(Unit, Leaf(TT.SYMBOL, "shift"), Leaf(TT.ERROR, str(exc), debug=H.debug))
 
                 ins = next_ins(x)
+                x.debug = DebugInfo(L.debug.start, R.debug.end, L.debug.lineno)
                 continue
             elif H.tt == TT.SPECIAL:
                 x, error, env, cstack = H.w(L, R, env, cstack)
@@ -438,6 +439,9 @@ def Eval(x, env, cstack):
                 env.bind(func.right_name, R)
                 x = func.body
                 ins = next_ins(x)
+
+                # TODO debuginfo line problem
+                x.debug = DebugInfo(L.debug.start, R.debug.end, L.debug.lineno)
                 continue
             elif H.tt == TT.TREE and iscans(H.H):
                 path, fn = tree2env(H, env)
