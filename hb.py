@@ -19,7 +19,7 @@ class CantReduce(WitnessedError): pass
 class NoDispatch(WitnessedError): pass
 
 
-class Panic:
+class Shift:
     """ Instance of some continuation travelling the stack.  Eg. raised error.
     Used when a native function wants to throw an error or raise some other
     kind of continuation.
@@ -418,14 +418,14 @@ def Eval(x, env, cstack):
                 x.debug = DebugInfo(L.debug.start, R.debug.end, L.debug.lineno)
                 continue
             elif H.tt == TT.SPECIAL:
-                x, panic, env, cstack = H.w(L, R, env, cstack)
+                x, shift, env, cstack = H.w(L, R, env, cstack)
 
-                # Capture panic tag and value from panic channel, wrap it with
+                # Capture shift tag and value from shift channel, wrap it with
                 # TT.ERROR and continue with this error continuation to next
                 # eval iteration
-                if panic is not None:
-                    assert isinstance(panic, Panic)
-                    x = hb_shift(panic.tag, panic.value)
+                if shift is not None:
+                    assert isinstance(shift, Shift)
+                    x = hb_shift(shift.tag, shift.value)
 
                 ins = next_ins(x)
                 continue
@@ -847,7 +847,7 @@ def mod_merge(a, b):
 def safe_variable(a, b, env, cstack):
     value, err = env.lookup(b.w, None), None
     if value is None:
-        err = Panic("error", Leaf(TT.STRING, f"Variable {b.w} not defined"))
+        err = Shift("error", Leaf(TT.STRING, f"Variable {b.w} not defined"))
     return value, err, env, cstack
 
 
