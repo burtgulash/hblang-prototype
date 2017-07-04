@@ -10,6 +10,7 @@ from stack import Cactus, CT, Frame
 import matrix
 
 
+ROOT_TAG = "__root__"
 SELF_F = "F"
 DISPATCH_SEP = ":"
 
@@ -164,14 +165,22 @@ def import_(a, b, env, cstack):
 
 
 def reset(a, b, env, cstack):
-    cstack.spush()
+    assert a.tt in (TT.SYMBOL, TT.STRING) # TODO keep only symbol as continuation tags?
+    tag = a.w
+    cstack.spush(tag)
     if isinstance(b, Leaf) and b.tt == TT.THUNK:
         b = b.w
     return b, None, env, cstack
 
 
 def shift(a, b, env, cstack):
-    cc = cstack.spop()
+    assert a.tt in (TT.SYMBOL, TT.STRING) # TODO keep only symbol as continuation tags?
+    tag = a.w
+    try:
+        cc = cstack.spop(tag)
+    except Cactus.Empty:
+        raise
+
     # # Don't let the continuation binding propagate to parent environment
     # env = Env(env)
     # So far continuation is just a pair of st and env
@@ -393,9 +402,9 @@ def Eval(x, env, cstack):
 #            print("R", R, R.debug, file=sys.stderr)
 
 
-#            new_debug = DebugInfo(L.debug.start, R.debug.end, L.debug.lineno) \
-#                        if L.debug and R.debug else None
-            new_debug = DebugInfo(L.debug.start, R.debug.end, L.debug.lineno)
+            new_debug = DebugInfo(L.debug.start, R.debug.end, L.debug.lineno) \
+                        if L.debug and R.debug else None
+            #new_debug = DebugInfo(L.debug.start, R.debug.end, L.debug.lineno)
 
             # TODO reorder by frequency of invocation. BUILTIN to top?
             if H.tt == TT.UNIT:
@@ -800,7 +809,7 @@ def json_each(filename, fn):
             item = Tree(item, fn, Unit)
 
             env = prepare_env()
-            cstack = Cactus()
+            cstack = Cactus(ROOT_TAG)
             item, _, _, _ = Eval(item, env, cstack)
             print(item)
 
@@ -1107,6 +1116,9 @@ def Execute(code, env, cstack):
         #print(f"Parse error: {err}", file=sys.stderr)
     except UnexpectedType as err:
         print("UNEXPECTED TYPE", err, file=sys.stderr)
+    except Cactus.Empty as err:
+        print(f"No matching reset with tag {err.tag}", file=sys.stderr)
+        cstack.reset(ROOT_TAG)
 
     return Unit, None, None, None
 
@@ -1157,7 +1169,7 @@ def Repl(env, rstack, prompt="> "):
 
 if __name__ == "__main__":
     env = prepare_env()
-    cstack = Cactus()
+    cstack = Cactus(ROOT_TAG)
 
     if len(sys.argv) == 1:
         try:
