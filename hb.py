@@ -104,7 +104,7 @@ def bakevars(x, vars):
         x = Leaf(x.tt, x.w.clone(body))
     elif x.tt == TT.SYMBOL and x.w in vars:
         # NOTE: only bake on symbol, not on string. Otherwise you couldn't do assignments
-        x = Tree(Leaf(TT.SYMBOL, "."), Leaf(TT.PUNCTUATION, "$"), x)
+        x = Tree(Leaf(TT.SYMBOL, ".", debug=x.debug), Leaf(TT.PUNCTUATION, "$"), x)
     return x
 
 
@@ -138,7 +138,7 @@ def makefunc_(a, env):
             #raise TypecheckError(f"Fn header expected cons TREE | SYMBOL. Got {header.tt}")
 
     body = bakevars(body, [left_name, right_name])
-    return Leaf(TT.FUNCTION, Function(left_name, right_name, body, env))
+    return Leaf(TT.FUNCTION, Function(left_name, right_name, body, env), debug=body.debug)
 
 
 def load(a, b, env, cstack):
@@ -356,7 +356,7 @@ def next_ins(x):
 
 
 def hb_shift(tag, value):
-    tag = Leaf(TT.SYMBOL, tag)
+    tag = Leaf(TT.SYMBOL, tag, debug=value.debug)
     return Tree(tag, Leaf(TT.SYMBOL, "shift"), value)
 
 
@@ -388,21 +388,29 @@ def Eval(x, env, cstack):
                 x, ins = R, next_ins(R)
                 continue
 
-            # print("EVAL", x, file=sys.stderr)
-            # print("L", L, file=sys.stderr)
-            # print("R", R, file=sys.stderr)
+#            print("EVAL", x, file=sys.stderr)
+#            print("L", L, file=sys.stderr)
+#            print("R", R, R.debug, file=sys.stderr)
+
+
+#            new_debug = DebugInfo(L.debug.start, R.debug.end, L.debug.lineno) \
+#                        if L.debug and R.debug else None
+            new_debug = DebugInfo(L.debug.start, R.debug.end, L.debug.lineno)
 
             # TODO reorder by frequency of invocation. BUILTIN to top?
             if H.tt == TT.UNIT:
                 x = H
+                x.debug = new_debug
             elif H.tt == TT.CONTINUATION:
                 cc, env = H.w
                 # TODO add another delim?? MinCaml does
                 # cstack.push(Frame(CT.Delim, L, H, R, env))
                 cstack.scopy(cc)
                 x, ins = L, next_ins(L)
+                x.debug = new_debug
             elif iscons(H):
                 x = Tree(L, H, R)
+                x.debug = new_debug
             elif H.tt == TT.BUILTIN:
                 try:
                     x = H.w(L, R)
@@ -412,10 +420,10 @@ def Eval(x, env, cstack):
                     # (x, err) pair from builtins instead of catching arbitrary
                     # error. In this case, at least create error inheritance
                     # hierarchy
-                    x = hb_shift("error", Leaf(TT.ERROR, str(exc), debug=H.debug))
+                    x = hb_shift("error", Leaf(TT.ERROR, str(exc), debug=new_debug))
 
                 ins = next_ins(x)
-                x.debug = DebugInfo(L.debug.start, R.debug.end, L.debug.lineno)
+                x.debug = new_debug
                 continue
             elif H.tt == TT.SPECIAL:
                 x, shift, env, cstack = H.w(L, R, env, cstack)
@@ -428,10 +436,12 @@ def Eval(x, env, cstack):
                     x = hb_shift(shift.tag, shift.value)
 
                 ins = next_ins(x)
+                x.debug = new_debug
                 continue
             elif H.tt == TT.THUNK:
                 x = unwrap(H)
                 ins = next_ins(x)
+                x.debug = new_debug
                 continue
             elif H.tt == TT.FUNCTION:
                 func = H.w
@@ -456,8 +466,7 @@ def Eval(x, env, cstack):
                 x = func.body
                 ins = next_ins(x)
 
-                # TODO debuginfo line problem
-                x.debug = DebugInfo(L.debug.start, R.debug.end, L.debug.lineno)
+                x.debug = new_debug
                 continue
             elif H.tt == TT.TREE and iscans(H.H):
                 path, fn = tree2env(H, env)
@@ -469,6 +478,7 @@ def Eval(x, env, cstack):
                                  TT.FUNCTION, TT.BUILTIN, TT.THUNK)
                 H = op
                 ins = CT.Right
+                x.debug = new_debug
                 continue
             elif H.tt == TT.OBJECT:
                 # If module given for dispatch,
@@ -483,11 +493,13 @@ def Eval(x, env, cstack):
                                 TT.FUNCTION, # TT.CLOSURE,
                                 TT.BUILTIN, TT.THUNK, TT.SYMBOL)
                 ins = CT.Right
+                x.debug = new_debug
                 continue
             elif H.tt in (TT.PUNCTUATION, TT.SYMBOL,
                           TT.STRING, TT.SEPARATOR):
                 H = dispatch(H, L.tt, R.tt, env)
                 ins = CT.Right
+                x.debug = new_debug
                 continue
             #elif H.tt == TT.CLOSURE:
             #    cstack.push(Frame(CT.Function, L, H, R, env))
@@ -888,7 +900,7 @@ BUILTINS = {
     "cpush":   [reset],
     "reset":   [reset],
     "cpop":    [shift],
-    "shift":    [shift],
+    "shift":   [shift],
     "load":    [load],
     "import":  [import_],
     "tap":     [tap],
@@ -1067,11 +1079,15 @@ def Execute(code, env, cstack):
         x = Parse(x)
 
         # Wrap in global reset
-        x = Tree(Unit, Leaf(TT.SYMBOL, "cpush"), Leaf(TT.THUNK, x))
+        x = Tree(Leaf(TT.SYMBOL, "__err__", debug=Unit.debug),
+                 Leaf(TT.SYMBOL, "reset"),
+                 Leaf(TT.THUNK, x, debug=x.debug))
 
         x, err, env, cstack = Eval(x, env, cstack)
         return x, err, env, cstack
     except (ParseError, NoDispatch, CantReduce) as err:
+        print("ERR", err, type(err), file=sys.stderr)
+
         if err.witness.debug is not None:
             start = err.witness.debug.start
             end = err.witness.debug.end
@@ -1090,7 +1106,7 @@ def Execute(code, env, cstack):
             print(err, file=sys.stderr)
         #print(f"Parse error: {err}", file=sys.stderr)
     except UnexpectedType as err:
-        print(err, file=sys.stderr)
+        print("UNEXPECTED TYPE", err, file=sys.stderr)
 
     return Unit, None, None, None
 

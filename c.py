@@ -46,6 +46,9 @@ class Leaf:
         self.tt = tt
         self.w = w
         self.debug = debug
+        # if debug is None:
+        #     import sys
+        #     print("WARNING: None debug", tt, w, file=sys.stderr)
 
     def show(n, function=False):
         # return str(f" {n.tt.name[:3].lower()}{n.w}")
@@ -90,7 +93,7 @@ class Tree:
         if n.H.tt == TT.SYMBOL:
             return f"({n.L} {n.H} {n.R})"
         if n.H.tt == TT.PUNCTUATION:
-            if isinstance(n.H, Leaf) and right_associative(n.H.w):
+            if isinstance(n.H, Leaf) and right_associative(n.H):
                 return f" ({n.L}{n.H}{n.R})"
             return f"({n.L} {n.H}{n.R})"
         return f"{n.L} {n.H}{n.R}"
@@ -138,7 +141,7 @@ Unit = Leaf(TT.UNIT, "", debug=DebugInfo(0, 0, 0))
 
 
 def right_associative(x):
-    return x and x.startswith(":")
+    return x and x.tt in (TT.SYMBOL, TT.STRING) and x.w.startswith(":")
     # return x and x in [":", "$", "%", "!%"]
 
 
@@ -275,7 +278,7 @@ def quote(x, paren_type):
     if paren_type == '[':
         x = Leaf(TT.THUNK, x, debug=x.debug)
     elif paren_type == '{':
-        x = Tree(Leaf(TT.THUNK, x), Leaf(TT.SYMBOL, "func"), Unit, debug=x.debug)
+        x = Tree(Leaf(TT.THUNK, x, debug=x.debug), Leaf(TT.SYMBOL, "func"), Unit)
     return x
 
 
@@ -345,7 +348,7 @@ def RParse(stream):
         rights.append(R)
         H = stream.next()
 
-        if not right_associative(H.w):
+        if not right_associative(H):
             stream.push(H)
             break
 
