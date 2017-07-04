@@ -98,7 +98,7 @@ def bakevars(x, vars):
     if isinstance(x, Tree):
         L, H, R = bakevars(x.L, vars), bakevars(x.H, vars), bakevars(x.R, vars)
         x = Tree(L, H, R)
-    elif x.tt == TT.THUNK:
+    elif x.tt in (TT.THUNK, TT.FUNTHUNK):
         x = Leaf(x.tt, bakevars(unwrap(x), vars))
     elif x.tt == TT.FUNCTION:
         body = bakevars(x.w.body, vars)
@@ -118,7 +118,7 @@ def iscons(x):
 
 
 def makefunc_(a, env):
-    if a.tt != TT.THUNK:
+    if a.tt not in (TT.THUNK, TT.FUNTHUNK):
         raise Exception(f"Can't create function out of '{a.tt}'")
 
     body = a.w
@@ -194,7 +194,7 @@ def shift(a, b, env, cstack):
     #env.bind("cc", continuation)
 
     # New: let the cc binding take place in function object
-    if isinstance(b, Leaf) and b.tt in (TT.THUNK, TT.FUNCTION):
+    if isinstance(b, Leaf) and b.tt in (TT.THUNK, TT.FUNTHUNK, TT.FUNCTION):
         b = Tree(continuation, b, Unit)
     return b, None, env, cstack
 
@@ -215,13 +215,13 @@ def get_type(a, b):
 def unwrap(H):
     if H.tt == TT.FUNCTION:
         return H.w.body
-    if H.tt == TT.THUNK:
+    if H.tt in (TT.THUNK, TT.FUNTHUNK):
         return H.w
     return H
 
 
 def is_function(x):
-    return x.tt in (TT.FUNCTION, TT.THUNK)
+    return x.tt in (TT.FUNCTION, TT.THUNK, TT.FUNTHUNK)
 
 
 def if_(a, b):
@@ -456,10 +456,15 @@ def Eval(x, env, cstack):
                 ins = next_ins(x)
                 x.debug = new_debug
                 continue
+            elif H.tt == TT.FUNTHUNK:
+                x = Tree(L, Tree(H, Leaf(TT.SYMBOL, "func"), Unit), R)
+                ins = next_ins(x)
+                x.debug = H.debug
+                continue
             elif H.tt == TT.THUNK:
                 x = unwrap(H)
                 ins = next_ins(x)
-                x.debug = new_debug
+                x.debug = new_debug # TODO really this way? Or just grab debug from H itself?
                 continue
             elif H.tt == TT.FUNCTION:
                 func = H.w
@@ -493,7 +498,7 @@ def Eval(x, env, cstack):
                 if op is None:
                     raise NoDispatch(f"Can't find module function {H} on L: {L.tt}", H)
                 assert op.tt in (TT.CONTINUATION, TT.SPECIAL,
-                                 TT.FUNCTION, TT.BUILTIN, TT.THUNK)
+                                 TT.FUNCTION, TT.BUILTIN, TT.THUNK, TT.FUNTHUNK)
                 H = op
                 ins = CT.Right
                 x.debug = new_debug
@@ -509,7 +514,7 @@ def Eval(x, env, cstack):
                 H = constructor
                 assert H.tt in (TT.CONTINUATION, TT.SPECIAL,
                                 TT.FUNCTION, # TT.CLOSURE,
-                                TT.BUILTIN, TT.THUNK, TT.SYMBOL)
+                                TT.BUILTIN, TT.THUNK, TT.FUNTHUNK, TT.SYMBOL)
                 ins = CT.Right
                 x.debug = new_debug
                 continue
@@ -588,7 +593,7 @@ def dispatch(H, ltt, rtt, env):
     # print("LOOKUPED", fn, L.tt, op, type(op), op.tt, file=sys.stderr)
     if op.tt not in (TT.CONTINUATION, TT.SPECIAL,
                      TT.FUNCTION,
-                     TT.BUILTIN, TT.THUNK, TT.SYMBOL, TT.PUNCTUATION,
+                     TT.BUILTIN, TT.THUNK, TT.FUNTHUNK, TT.SYMBOL, TT.PUNCTUATION,
                      TT.OBJECT # dispatch on module/object -> find constructor
     ):
         raise TypeError(f"Dispatched op '{op.tt}' doesn't satisfy function-like types")
