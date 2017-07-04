@@ -164,6 +164,12 @@ def import_(a, b, env, cstack):
     return Unit, None, env, cstack
 
 
+def execute(a, b, env, cstack):
+    assert a.tt in (TT.SYMBOL, TT.STRING)
+    code = a.w
+    return Execute_(code, env, cstack)
+
+
 def reset(a, b, env, cstack):
     assert a.tt in (TT.SYMBOL, TT.STRING) # TODO keep only symbol as continuation tags?
     tag = a.w
@@ -906,6 +912,7 @@ BUILTINS = {
     ">>": bind,
     "error": lambda a, b: Leaf(TT.ERROR, a),
 
+    "execute":    [execute],
     "cpush":   [reset],
     "reset":   [reset],
     "cpop":    [shift],
@@ -1080,20 +1087,24 @@ def as_module(mod_dict):
     return d
 
 
+def Execute_(code, env, cstack):
+    x = code
+    x = Lex(x)
+    # print("LEX", y)
+    x = Parse(x)
+
+    # Wrap in global reset
+    x = Tree(Leaf(TT.SYMBOL, "__err__", debug=Unit.debug),
+             Leaf(TT.SYMBOL, "reset"),
+             Leaf(TT.THUNK, x, debug=x.debug))
+
+    x, err, env, cstack = Eval(x, env, cstack)
+    return x, err, env, cstack
+
+
 def Execute(code, env, cstack):
     try:
-        x = code
-        x = Lex(x)
-        # print("LEX", y)
-        x = Parse(x)
-
-        # Wrap in global reset
-        x = Tree(Leaf(TT.SYMBOL, "__err__", debug=Unit.debug),
-                 Leaf(TT.SYMBOL, "reset"),
-                 Leaf(TT.THUNK, x, debug=x.debug))
-
-        x, err, env, cstack = Eval(x, env, cstack)
-        return x, err, env, cstack
+        return Execute_(code, env, cstack)
     except (ParseError, NoDispatch, CantReduce) as err:
         print("ERR", err, type(err), file=sys.stderr)
 
