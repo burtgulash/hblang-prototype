@@ -141,7 +141,7 @@ Unit = Leaf(TT.UNIT, "", debug=DebugInfo(0, 0, 0))
 
 
 def right_associative(x):
-    return x and x.tt in (TT.SYMBOL, TT.STRING, TT.PUNCTUATION) and x.w.startswith(":")
+    return x and x.tt == TT.PUNCTUATION and x.w.startswith(":")
     # return x and x in [":", "$", "%", "!%"]
 
 
