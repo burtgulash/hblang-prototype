@@ -435,6 +435,9 @@ def Eval(x, env, cstack):
                     # (x, err) pair from builtins instead of catching arbitrary
                     # error. In this case, at least create error inheritance
                     # hierarchy
+                    if isinstance(exc, AssertionError):
+                        raise
+                    #print("RROR", type(exc), str(exc), file=sys.stderr)
                     x = hb_shift("error", Leaf(TT.ERROR, str(exc), debug=new_debug))
 
                 ins = next_ins(x)
@@ -1093,8 +1096,12 @@ def Execute_(code, env, cstack):
     # print("LEX", y)
     x = Parse(x)
 
+    # Wrap in error reset
+    x = Tree(Leaf(TT.SYMBOL, "error", debug=Unit.debug),
+             Leaf(TT.SYMBOL, "reset"),
+             Leaf(TT.THUNK, x, debug=x.debug))
     # Wrap in global reset
-    x = Tree(Leaf(TT.SYMBOL, "__err__", debug=Unit.debug),
+    x = Tree(Leaf(TT.SYMBOL, ROOT_TAG, debug=Unit.debug),
              Leaf(TT.SYMBOL, "reset"),
              Leaf(TT.THUNK, x, debug=x.debug))
 

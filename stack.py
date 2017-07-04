@@ -60,8 +60,8 @@ class Cactus:
 
     class Empty(Exception):
 
-        def __init__(self, tag):
-            super().__init__()
+        def __init__(self, msg, tag):
+            super().__init__(msg)
             self.tag = tag
 
     def __init__(self, tag: str):
@@ -80,7 +80,7 @@ class Cactus:
     def spop(self, tag: str):
         while True:
             if not self.rope:
-                raise Cactus.Empty(tag)
+                raise Cactus.Empty("SPOP empty", tag)
             st = self.rope.pop()
             if st.tag == tag:
                 return st
@@ -96,7 +96,7 @@ class Cactus:
 
     def peek(self) -> Union[Frame, None]:
         if not self.rope: # TODO include this? Not tested...
-            raise Cactus.Empty("__peek__")
+            raise Cactus.Empty("PEEKING empty", "__peek__")
         return self.rope[-1].peek()
 
     def pop(self) -> Union[Frame, None]:
