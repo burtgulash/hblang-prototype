@@ -174,7 +174,7 @@ def reset(a, b, env, cstack):
     assert a.tt in (TT.SYMBOL, TT.STRING) # TODO keep only symbol as continuation tags?
     tag = a.w
     cstack.spush(tag)
-    if isinstance(b, Leaf) and b.tt == TT.THUNK:
+    if isinstance(b, Leaf) and b.tt in (TT.THUNK, TT.FUNTHUNK):
         b = b.w
     return b, None, env, cstack
 
@@ -491,7 +491,7 @@ def Eval(x, env, cstack):
 
                 x.debug = new_debug
                 continue
-            elif H.tt == TT.TREE and iscans(H.H):
+            elif H.tt == TT.TREE and iscons(H.H):
                 path, fn = tree2env(H, env)
                 fn_env = path2env(path, env)
                 op = fn_env.lookup(fn, None)
