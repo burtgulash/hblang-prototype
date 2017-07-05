@@ -417,10 +417,8 @@ def Eval(x, env, cstack):
                 x = H
                 x.debug = new_debug
             elif H.tt == TT.CONTINUATION:
-                cc, env = H.w
-                # TODO add another delim?? MinCaml does
-                # cstack.push(Frame(CT.Delim, L, H, R, env))
-                cstack.scopy(cc)
+                cc, env = H.w     # unwrap continuation and captured environment
+                cstack.scopy(cc)  # Copy over its stack onto newly created stack
                 x, ins = L, next_ins(L)
                 x.debug = new_debug
             elif iscons(H):

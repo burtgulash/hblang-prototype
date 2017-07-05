@@ -1,7 +1,8 @@
-loop is {cnt.body
-    | 0 as cnt
-    | break is {loop shift x}
-    | loop reset [()
-        {()body() | .$cnt + 1 as cnt | ()F()}
+loop is {label.body
+    | 0 as i
+    | label reset [()
+        {()body() | .$i + 1 as i | ()F()}
       ()]
 }
+
+| break is {label.value | label shift value}
