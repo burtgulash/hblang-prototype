@@ -1118,7 +1118,7 @@ def Execute(code, env, cstack):
     try:
         return Execute_(code, env, cstack)
     except (ParseError, NoDispatch, CantReduce) as err:
-        print("ERR", err, type(err), file=sys.stderr)
+        #print("ERR", err, type(err), file=sys.stderr)
 
         if err.witness.debug is not None:
             start = err.witness.debug.start
@@ -1141,7 +1141,7 @@ def Execute(code, env, cstack):
         print("UNEXPECTED TYPE", err, file=sys.stderr)
     except Cactus.Empty as err:
         print(f"No matching reset with tag {err.tag}", file=sys.stderr)
-        cstack.reset(ROOT_TAG)
+        cstack.spush(ROOT_TAG)
 
     return Unit, None, None, None
 

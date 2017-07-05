@@ -66,16 +66,10 @@ class Cactus:
 
     def __init__(self, tag: str):
         self.rope = []
-        self.reset(tag)
-
-    def _push_st(self, st: Stack):
-        self.rope.append(st)
-
-    def reset(self, tag: str):
         self.spush(tag)
 
     def spush(self, tag: str):
-        self._push_st(Stack(tag))
+        self.rope.append(Stack(tag))
 
     def spop(self, tag: str):
         while True:
