@@ -941,6 +941,18 @@ BUILTINS = {
 
 
 modules = {
+    "true": {
+        ".": lambda a, b: Leaf("true", "True"),
+        ("and", "false"): lambda a, b: b,
+        "and": lambda a, b: b,
+        "or": lambda a, b: a,
+    },
+    "false": {
+        ".": lambda a, b: Leaf("false", "False"),
+        ("or", "true"): lambda a, b: b,
+        "or": lambda a, b: b,
+        "and": lambda a, b: a,
+    },
     "range": {
         ("+", TT.NUM): lambda a, b: Leaf("range", (a.w[0] + b.w, a.w[1], a.w[2])),
         ("-", TT.NUM): lambda a, b: Leaf("range", (a.w[0] - b.w, a.w[1], a.w[2])),
@@ -1058,6 +1070,9 @@ modules = {
         ("~", TT.STRING): lambda a, b: Leaf(a.tt, a.w + b.w),
         ("~", TT.SYMBOL): lambda a, b: Leaf(a.tt, a.w + b.w),
         ("/", TT.STRING): lambda a, b: Leaf("vec", [Leaf(TT.STRING, x) for x in a.w.split(b.w)]),
+        ("@", TT.NUM): lambda a, b: Leaf(TT.STRING, a.w[b.w]),
+        ("@", TT.TREE): lambda a, b: Leaf(TT.STRING, a.w[b.L.w : b.R.w]),
+        "len": lambda a, b: Leaf(TT.NUM, len(a.w)),
     },
     TT.FUNCTION: {
         # ("dispatch", TT.TREE): lambda a, b, env: set_dispatch(a, b, env), # TODO special
