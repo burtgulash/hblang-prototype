@@ -944,12 +944,14 @@ modules = {
     "true": {
         ".": lambda a, b: Leaf("true", "True"),
         ("and", "false"): lambda a, b: b,
+        ("and", TT.THUNK): lambda a, b: unwrap(b),
         "and": lambda a, b: b,
         "or": lambda a, b: a,
     },
     "false": {
         ".": lambda a, b: Leaf("false", "False"),
         ("or", "true"): lambda a, b: b,
+        ("or", TT.THUNK): lambda a, b: unwrap(b),
         "or": lambda a, b: b,
         "and": lambda a, b: a,
     },

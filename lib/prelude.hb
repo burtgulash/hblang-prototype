@@ -15,3 +15,4 @@
                   | .$l = 0 then () : [
                     xs @0 {acc.i | i >= (.$l) then [acc] : [(acc f (xs @i)) F (i + 1)]} 1
                   ]}
+| times       is {fn : n | {x {a : i | i <= 0 then [a] : [a fn. F (i - 1)]} n} func.}
